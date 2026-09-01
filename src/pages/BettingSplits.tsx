@@ -750,14 +750,16 @@ export default function BettingSplitsPage({
 
   const gamesByDate = useMemo(
     () =>
-      (games ?? []).reduce<Record<string, NonNullable<typeof games>[number][]>>(
-        (acc, game) => {
+      // games comes from the untyped private API (LAW 0), so the explicit
+      // reduce type argument is illegal here — the accumulator carries the type.
+      (games ?? []).reduce(
+        (acc: Record<string, any[]>, game: any) => {
           const date = effectiveGameDate(game!.gameDate, game!.startTimeEst);
           if (!acc[date]) acc[date] = [];
           acc[date]!.push(game!);
           return acc;
         },
-        {}
+        {} as Record<string, any[]>
       ),
     [games]
   );

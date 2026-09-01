@@ -46,7 +46,12 @@ export interface TrackedBetLeg {
   updatedAt: string | Date;
 }
 
-/** A tracked bet ticket as shown in the BetTracker UI. */
+/**
+ * A tracked bet ticket as shown in the BetTracker UI.
+ * Nullability mirrors the origin `tracked_bets` table exactly — `odds`, `risk`,
+ * `toWin`, `pick`, `legCount` and the timestamps are NOT NULL there, so the UI
+ * may rely on them; everything the origin leaves nullable stays nullable here.
+ */
 export interface TrackedBet {
   id: number;
   userId: number;
@@ -60,12 +65,33 @@ export interface TrackedBet {
   gameDate: string;
   awayTeam: string | null;
   homeTeam: string | null;
-  odds: number | null;
-  stake: string | number | null;
-  toWin: string | number | null;
+  betType: string;
+  pick: string;
+  line: string | null;
+  /** NOT NULL in the origin schema (american odds). */
+  odds: number;
+  originalOdds: number | null;
+  legCount: number;
+  /** NOT NULL decimals — serialized as strings on the wire. */
+  risk: string;
+  toWin: string;
+  riskUnits: string | null;
+  toWinUnits: string | null;
+  book: string | null;
   result: BetResult;
+  awayScore: string | null;
+  homeScore: string | null;
+  wagerType: "PREGAME" | "LIVE";
+  customLine: string | null;
   legs?: TrackedBetLeg[];
   createdAt: string | Date;
-  updatedAt?: string | Date;
-  [key: string]: unknown;
+  updatedAt: string | Date;
+  /**
+   * The private API returns more columns than the shell declares here. They are
+   * intentionally untyped (LAW 0: the schema is not vendored into this repo),
+   * so unlisted fields resolve to `any` rather than `unknown` — the shell
+   * cannot narrow what it cannot see.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
 }

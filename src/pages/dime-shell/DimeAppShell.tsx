@@ -143,7 +143,7 @@ export default function DimeAppShell({
   // chat-only mode never mounts a lazy pane, never runs pane-switch focus/
   // scroll bookkeeping, and never renders shell chrome — it renders bare
   // chat, identically to the pre-shell standalone /chat route.
-  let paneContent = null;
+  let paneContent: React.ReactNode = null;
   if (mode === "shell") {
     if (renderedRoute.pane === "feed") {
       paneContent = (

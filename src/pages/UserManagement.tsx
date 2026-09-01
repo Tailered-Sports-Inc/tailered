@@ -821,16 +821,16 @@ export default function UserManagement() {
 
   // ── Build unique option lists for each column ─────────────────────────────
   const opts: Record<ColKey, string[]> = {
-    username: Array.from(new Set(rawUsers.map(u => `@${u.username}`))).sort(),
-    email: Array.from(new Set(rawUsers.map(u => u.email))).sort(),
+    username: Array.from(new Set<string>(rawUsers.map(u => `@${u.username}`))).sort(),
+    email: Array.from(new Set<string>(rawUsers.map(u => u.email))).sort(),
     role: ["owner", "admin", "user"],
     access: ["YES", "NO"],
     expiry: Array.from(
-      new Set(rawUsers.map(u => formatExpiry(u.expiryDate)))
+      new Set<string>(rawUsers.map(u => formatExpiry(u.expiryDate)))
     ).sort(),
     terms: ["ACCEPTED", "PENDING"],
     lastSignIn: Array.from(
-      new Set(rawUsers.map(u => formatDate(u.lastSignedIn)))
+      new Set<string>(rawUsers.map(u => formatDate(u.lastSignedIn)))
     ).sort(),
   };
 

@@ -2788,7 +2788,7 @@ export default function BetTracker({ previewMode = false, embeddedInShell = fals
     // Always prefer linescoreByGameNum for DH-safe lookups.
     const map = new Map<string, LinescoreEntry>();
     if (!linescoreQuery.data) return map;
-    for (const ls of Object.values(linescoreQuery.data)) {
+    for (const ls of Object.values(linescoreQuery.data as Record<string, LinescoreEntry>)) {
       const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}`;
       map.set(key, ls); // last write wins — only safe for non-DH games
     }
@@ -2806,7 +2806,7 @@ export default function BetTracker({ previewMode = false, embeddedInShell = fals
   const linescoreByPk = useMemo(() => {
     const map = new Map<number, LinescoreEntry>();
     if (!linescoreQuery.data) return map;
-    for (const ls of Object.values(linescoreQuery.data)) {
+    for (const ls of Object.values(linescoreQuery.data as Record<string, LinescoreEntry>)) {
       map.set(ls.gamePk, ls);
     }
     // Summary-only log: per-entry logging (30+ lines/60s) was removed for performance
@@ -2832,7 +2832,7 @@ export default function BetTracker({ previewMode = false, embeddedInShell = fals
   const linescoreByGameNum = useMemo(() => {
     const map = new Map<string, LinescoreEntry>();
     if (!linescoreQuery.data) return map;
-    for (const ls of Object.values(linescoreQuery.data)) {
+    for (const ls of Object.values(linescoreQuery.data as Record<string, LinescoreEntry>)) {
       const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}:${ls.gameNumber}`;
       map.set(key, ls);
     }
@@ -3410,7 +3410,7 @@ export default function BetTracker({ previewMode = false, embeddedInShell = fals
     // user is already on the page (linescore poll fires every 60s).
     if (linescoreQuery.data) {
       let newFinalFound = false;
-      for (const ls of Object.values(linescoreQuery.data)) {
+      for (const ls of Object.values(linescoreQuery.data as Record<string, LinescoreEntry>)) {
         const key = `${ls.gameDate}:${ls.awayAbbrev}:${ls.homeAbbrev}`;
         const prev = prevLinescoreRef.current[key];
         if (ls.status === "Final" && prev && prev !== "Final") {
