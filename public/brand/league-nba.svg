@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="NBA">
+  <rect width="64" height="64" rx="12" fill="#0B0B0B"/>
+  <text x="32" y="40" text-anchor="middle" font-family="'Familjen Grotesk', -apple-system, sans-serif" font-size="20" font-weight="700" letter-spacing="0.5" fill="#45E0A8">NBA</text>
+</svg>

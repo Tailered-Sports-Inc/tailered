@@ -1,0 +1,497 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* ── Single-font mandate ─────────────────────────────────────────────────
+   * Familjen Grotesk is the ONLY typeface. Both the sans AND mono Tailwind
+   * families resolve to it, so every `font-sans`/`font-mono` utility renders
+   * Familjen Grotesk — IBM Plex Mono / JetBrains Mono are fully retired. */
+  --font-sans: "Familjen Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Familjen Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* ── Custom breakpoints (Tailwind 4 --breakpoint-* syntax) ──────────────── */
+  --breakpoint-xs: 375px;   /* iPhone 14/15 Pro baseline */
+  --breakpoint-sm: 640px;   /* large phone / small tablet */
+  --breakpoint-md: 768px;   /* iPad Mini / small tablet — NEW tier */
+  --breakpoint-lg: 1024px;  /* iPad landscape / small desktop */
+  --breakpoint-xl: 1280px;  /* laptop */
+  --breakpoint-2xl: 1600px; /* Wide desktop — NEW tier */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.5rem;
+
+  /* ── Viewport Scaling Engine ─────────────────────────────────────────────
+   * Base reference: 393px (iPhone 16/15/14 Pro baseline)
+   * scale = viewportWidth / 393, clamped [1, 3.85]
+   *
+   * Device viewport database (validation reference only, NOT breakpoints):
+   *   Mobile:  360px Pixel/Samsung · 375px iPhone SE/13 Mini · 384px Galaxy S
+   *            390px iPhone 14/15 · 393px iPhone 16 Pro · 412px Pixel large
+   *            414px iPhone 11/XR · 430px iPhone 16 Pro Max · 480px Android large
+   *            540px Android ultra-large
+   *   Tablet:  768px iPad Mini · 820px iPad Air · 834px iPad Pro 11
+   *            1024px iPad landscape · 1280px Android tablet
+   *   Desktop: 1280px small laptop · 1366px common laptop · 1440px standard monitor
+   *            1512px MacBook Pro · 1680px wide laptop · 1920px standard desktop
+   *            2560px QHD · 2880px MacBook Retina · 3440px ultrawide · 3840px 4K
+   * ─────────────────────────────────────────────────────────────────────── */
+  --vp-base: 393;
+  /* ── CORRECTED scale: clamp(0.81, vw/393, 3.85)
+   *   At 320px (SE 1st gen): 320/393 = 0.814 — below 1 so pills/fonts shrink proportionally
+   *   At 375px (SE 3rd gen): 375/393 = 0.954
+   *   At 393px (iPhone 16 Pro): 1.000 (baseline)
+   *   At 430px (iPhone 16 Pro Max): 1.094
+   *   Old clamp(1, ...) floor prevented sub-393px shrinking — now corrected.
+   * ─────────────────────────────────────────────────────────────────────── */
+  --scale: clamp(0.81, calc(100vw / 393), 3.85);
+
+  /* ── Safe area insets (populated by viewport-fit=cover in index.html) ────
+   * Falls back to 0px on non-notched devices. Used for header top padding
+   * and feed bottom padding so content is never obscured by notch/home bar.
+   * ─────────────────────────────────────────────────────────────────────── */
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+
+  /* Fluid typography tokens — clamp(mobile-min, scale-driven, desktop-max)
+   * READABILITY MANDATE: minimum sizes raised so no text is ever illegibly small.
+   * Mobile floor: 11px minimum for body/label text, 13px for base, 15px for md.
+   * All secondary/sublabel text must be readable without squinting. */
+  --fs-xs:   clamp(11px, calc(12px * var(--scale)), 14px);
+  --fs-sm:   clamp(12px, calc(13px * var(--scale)), 15px);
+  --fs-base: clamp(13px, calc(14px * var(--scale)), 17px);
+  --fs-md:   clamp(14px, calc(15px * var(--scale)), 19px);
+  --fs-lg:   clamp(15px, calc(16px * var(--scale)), 22px);
+  --fs-xl:   clamp(16px, calc(18px * var(--scale)), 26px);
+  --fs-2xl:  clamp(18px, calc(21px * var(--scale)), 34px);
+  --fs-3xl:  clamp(20px, calc(25px * var(--scale)), 46px);
+  --fs-nav:  clamp(12px, calc(13px * var(--scale)), 16px);
+  --fs-label: clamp(11px, calc(12px * var(--scale)), 14px);
+  --fs-header: clamp(12px, calc(13px * var(--scale)), 15px);
+
+  /* Fluid spacing tokens */
+  --sp-1: clamp(2px,  calc(2px  * var(--scale)), 6px);
+  --sp-2: clamp(4px,  calc(4px  * var(--scale)), 10px);
+  --sp-3: clamp(6px,  calc(6px  * var(--scale)), 14px);
+  --sp-4: clamp(8px,  calc(8px  * var(--scale)), 18px);
+  --sp-6: clamp(10px, calc(10px * var(--scale)), 24px);
+  --sp-8: clamp(12px, calc(12px * var(--scale)), 28px);
+
+  /* Fluid dimension tokens */
+  --logo-sm:   clamp(24px, calc(24px * var(--scale)), 48px);
+  --logo-md:   clamp(32px, calc(32px * var(--scale)), 64px);
+  --row-height: clamp(40px, calc(40px * var(--scale)), 80px);
+  --card-radius: clamp(6px, calc(6px  * var(--scale)), 16px);
+  --pill-height: clamp(20px, calc(20px * var(--scale)), 44px);
+
+  /* ── THREE-COLOR LAW v2 · TONAL AMENDMENT (dime-ai/THREE-COLOR-LAW.md) ────
+   * Mint (#45E0A8) is the ONLY hue. Black and white may render as achromatic
+   * TONES (pure greys, zero hue) so hierarchy, depth and hover return. Still
+   * banned: purple, gold, neon, gradients, and any *chromatic* second accent.
+   * Default (dark) theme below; light theme in `html:not(.dark)`. */
+  --background: #000000;
+  --foreground: #FFFFFF;
+
+  --card: #0A0A0A;              /* v2: surface tier 1 (was #000 flat) */
+  --card-foreground: #FFFFFF;
+
+  --popover: #141414;           /* v2: raised tier — menus/popovers get depth */
+  --popover-foreground: #FFFFFF;
+
+  /* Mint is the single accent (was the retired purple). Black ink on mint. */
+  --primary: #45E0A8;
+  --primary-foreground: #000000;
+
+  --secondary: #141414;         /* v2: subtle chip/secondary fill */
+  --secondary-foreground: #FFFFFF;
+
+  --muted: #141414;             /* v2: quiet raised fill */
+  --muted-foreground: #A6A6A6;  /* v2: secondary text tier — 8.6:1 on black */
+
+  --accent: #45E0A8;
+  --accent-foreground: #000000;
+
+  /* No red in the base system — negative/destructive reads as plain ink.
+   * (Bet-loss red is a scoped exception carried by --loss-red, not this token.) */
+  --destructive: #FFFFFF;
+
+  --border: #262626;            /* v2: quiet default hairline (was full #FFF) */
+  --border-strong: #FFFFFF;     /* v2: rationed white keyline — signature only */
+  --input: #262626;
+  --ring: #45E0A8;
+
+  /* Positive edge = mint; negative/pass = plain ink (no red) */
+  --edge-green: #45E0A8;
+  /* Mint as INK (text/icons). Dark: raw mint. Light remaps below — owner law
+   * 2026-07-31: on light surfaces mint exists ONLY as a fill with black ink. */
+  --mint-ink: var(--primary);
+  --edge-red: #FFFFFF;
+
+  /* Scoped exception: bet-loss indicators (Bet Tracker / calendar) keep red. */
+  --loss-red: #FF3B3B;
+
+  /* ── Discord platform exception (owner-approved 2026-07-24) ───────────────
+   * Discord's own brand colour + typeface, permitted ONLY on controls that
+   * represent Discord itself (the "Continue with Discord" login button and
+   * the "Connect Discord" settings row). This is platform attribution, not a
+   * second accent — mint remains the only Dime accent. Never use these tokens
+   * for emphasis, edges, links, or any non-Discord surface.
+   * #5865F2 is Discord's CURRENT blurple (their 2021 rebrand). White on it
+   * measures 4.61:1 — AA for small text. The pre-2021 #7289DA and the
+   * #738ADB in the deleted legacy code both fail AA (3.33 / 3.29) and are
+   * banned. Rules: dime-ai/THREE-COLOR-LAW.md §"Discord platform exception". */
+  --discord-blurple: #5865F2;
+  --discord-blurple-hover: #4752C4;   /* Discord's own pressed/hover step */
+  --discord-on-blurple: #FFFFFF;
+  --font-discord: 'GG Sans', 'Familjen Grotesk', system-ui, -apple-system, sans-serif;
+
+  /* Sidebar */
+  --sidebar: #000000;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #45E0A8;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #141414;    /* v2: sidebar row hover/active fill */
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #262626;    /* v2: quiet sidebar keyline (was #FFF) */
+  --sidebar-ring: #45E0A8;
+
+  /* v2 tonal ramp — extra tiers consumed by app components directly */
+  --text-secondary: #A6A6A6;    /* 8.6:1 on black */
+  /* Audit DIME-UI-005 (2026-07-31): the old 6E-grey measured 3.6–4.1:1 under
+   * the 10–13px labels that consume this token (tracker bt-label, splits
+   * separators, landing captions) — below WCAG AA 4.5:1 for small text. The
+   * 7E-grey holds 5.2:1 on black, 4.9:1 on tier-1 cards, 4.5:1 on raised. */
+  --text-muted: #7E7E7E;
+  --surface-raised: #141414;
+  --row-hover: #141414;         /* hover returns (was transparent) */
+  --row-active: #1F1F1F;
+}
+
+/* Light theme — Three-Color Law: white ground, black ink/borders, mint accent.
+ * (html carries `.dark` by default; ThemeContext removes it for light mode.) */
+html:not(.dark) {
+  --background: #FFFFFF;
+  --foreground: #000000;
+  --card: #F7F7F7;              /* v2: surface tier 1 */
+  --card-foreground: #000000;
+  --popover: #FFFFFF;
+  --popover-foreground: #000000;
+  --primary: #45E0A8;
+  --primary-foreground: #000000;
+  --secondary: #EFEFEF;         /* v2: subtle chip fill */
+  --secondary-foreground: #000000;
+  --muted: #EFEFEF;             /* v2: quiet raised fill */
+  --muted-foreground: #595959;  /* v2: secondary text tier — 7.0:1 on white */
+  --accent: #45E0A8;
+  --accent-foreground: #000000;
+  --destructive: #000000;
+  --border: #D9D9D9;            /* v2: quiet default hairline */
+  --border-strong: #000000;     /* v2: rationed keyline */
+  --input: #D9D9D9;
+  --ring: #45E0A8;
+  --edge-green: #45E0A8;
+  --mint-ink: #0A7C50; /* the one sanctioned mint-ink tone on light (5.2:1 white / 4.9:1 F7-tier) */
+  --edge-red: #000000;
+  --loss-red: #D92D2D; /* theme audit 2026-07-31: FF3B3B measured 3.3:1 on light; 4.8:1 on white here. Dark keeps FF3B3B (5.9:1 on black). */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #45E0A8;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #EFEFEF;    /* v2: sidebar row hover/active fill */
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #D9D9D9;    /* v2: quiet sidebar keyline */
+  --sidebar-ring: #45E0A8;
+  --text-secondary: #595959;    /* 7.0:1 on white */
+  --text-muted: #767676;        /* 4.5:1 on white */
+  --surface-raised: #EFEFEF;
+  --row-hover: #EFEFEF;
+  --row-active: #E4E4E4;
+}
+
+/* Z-INDEX LADDER (documented 2026-07-24, PR #198 X-ZINDEX census — no
+ * collisions found, values recorded so future layers slot in knowingly):
+ *   0–50    page chrome (Tailwind z-10/20/30/40; z-50 = sticky headers, chat
+ *           drawer stack in conversation.css runs 60–100)
+ *   99–100  full-screen overlays (mobile-nav debug panel, plan-editor modal,
+ *           BetTracker banner)
+ *   200     top app modals (chat modal in conversation.css, UserManagement
+ *           confirm) — mutually exclusive by route, never stacked
+ *   toasts  sonner library default (≫200) — always above everything
+ * New layers: chrome ≤50, overlays 100, modals 200. Do not mint new values
+ * above 200; toasts must stay on the library default. */
+
+/* SUPERSEDED (2026-07-24, PR #198, D-BG-SEAM — owner-approved): System
+ * previously carried its own fixed neutral-grey appearance (18/24/32-level
+ * grey canvas/card/raised tiers — exact values in git history). That third
+ * identity produced a canvas seam against Law-v2 pure-black surfaces, so
+ * System now follows Dark exactly (pure-black canvas, tiers from :root).
+ * Light remains white. No html[data-theme-mode="system"] overrides remain —
+ * do not reintroduce a distinct System palette without a law amendment. */
+
+/* ═══ Law v3 — Dimensional amendment (owner-approved 2026-07-13) ══════════════
+   Relaxes Law v2's flat/no-shadow rule for the projections product. NEW: mint
+   ACCENT SURFACES (tinted cell + border + high-contrast foreground) and
+   ELEVATION shadows on major surfaces/controls. Alpha is now permitted in
+   SHADOWS and in the mint-tint color-mix ONLY; surface FILLS stay solid, tables
+   stay flat, mint stays the one hue. Full rules in dime-ai/THREE-COLOR-LAW.md §v3.
+   Contrast verified: light fg #09251C on tint 14.6:1; dark fg #DFF9EF on tint 14.8:1. */
+:root {
+  /* The one brand mint (2026-08-02): every component consumes this token —
+     raw #45E0A8 literals outside this block are a law violation. */
+  --brand-mint: #45E0A8;
+  /* dark-theme defaults (solid fallbacks; color-mix upgrade below) */
+  --brand-mint-surface: #0B241B;
+  --brand-mint-border: #298665;
+  --brand-mint-foreground: #DFF9EF;
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.5);
+  --elev-2: 0 2px 6px rgb(0 0 0 / 0.5);
+  --elev-card: 0 1px 2px rgb(0 0 0 / 0.6), 0 10px 30px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --elev-lift: 0 2px 4px rgb(0 0 0 / 0.6), 0 16px 40px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+html:not(.dark) {
+  --brand-mint-surface: #DEF9EF;
+  --brand-mint-border: #2F9872;
+  --brand-mint-foreground: #09251C;
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.06);
+  --elev-2: 0 1px 1px rgb(0 0 0 / 0.05), 0 8px 24px rgb(0 0 0 / 0.07);
+  --elev-card: 0 1px 1px rgb(0 0 0 / 0.05), 0 8px 24px rgb(0 0 0 / 0.07), inset 0 1px 0 rgb(255 255 255 / 0.8);
+  --elev-lift: 0 2px 4px rgb(0 0 0 / 0.06), 0 14px 34px rgb(0 0 0 / 0.10);
+}
+/* Modern-CSS upgrade: derive the tint/border from the live mint via color-mix.
+   Falls back to the solid hexes above on engines without color-mix. */
+@supports (color: color-mix(in srgb, red, red)) {
+  :root { --brand-mint-surface: color-mix(in srgb, var(--brand-mint) 16%, #000000); --brand-mint-border: color-mix(in srgb, var(--brand-mint) 60%, #000000); }
+  html:not(.dark) { --brand-mint-surface: color-mix(in srgb, var(--brand-mint) 18%, #FFFFFF); --brand-mint-border: color-mix(in srgb, var(--brand-mint) 68%, #000000); }
+}
+
+/* ═══ Animated theme transition (View Transitions API) ════════════════════════
+   A restrained crossfade of the ROOT visual layers only (surfaces, borders,
+   icons, text) when the theme changes — not every element independently, so the
+   swap stays cheap. ThemeContext wraps the class toggle in startViewTransition;
+   this sets its duration. Disabled under reduced motion (and the JS skips the
+   transition entirely there too). */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 200ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  /* MASTER.md motion law: pulses and spins are disabled under reduced motion.
+   * Tailwind's animate-* utilities have no built-in guard (43 animate-pulse
+   * usages across 12 files as of the 2026-07-31 forensic audit; originally
+   * 33/10, audit D-PULSE-REDUCE). !important is required here to beat the
+   * utility layer; this media block is the single sanctioned place for it.
+   * The tw-animate-css classes (animate-in/out, accordion, caret) drive every
+   * Radix overlay — dialog, sheet, popover, drawer — and ship no guard of
+   * their own (audit DIME-UI-003), so they are killed here too. */
+  .animate-pulse,
+  .animate-spin,
+  .animate-bounce,
+  .animate-ping,
+  .animate-in,
+  .animate-out,
+  .animate-accordion-down,
+  .animate-accordion-up,
+  .animate-caret-blink,
+  .prez-game-pulse {
+    animation: none !important;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  /* Unified focus treatment (audit D-FOCUS-UNIFY): one visible 2px mint ring
+   * on :focus-visible everywhere, replacing the old 1px 50%-alpha outline that
+   * coexisted with two stronger page-local treatments. Keyboard users get the
+   * same signal on every surface; pointer clicks stay ring-free. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  html {
+    /* Fluid base type (apple-design: size with the viewport). Scales rem-based
+     * text up on larger screens so the UI never reads cramped on desktop/wide,
+     * while staying at the comfortable ~16px browser default at ≤~1067px so
+     * mobile/tablet layouts (and the pinned responsive feed geometry) are
+     * unchanged. rem min/max respect the user's browser font-size (zoom/a11y);
+     * the vw term drives the screen-size response. Fixed-px utilities
+     * (text-[11px] micro-labels, .feed-tab) intentionally stay put. */
+    font-size: clamp(1rem, 0.8rem + 0.3vw, 1.18rem);
+    /* Prevent iOS rubber-band overscroll from revealing white/gray background.
+     * overscroll-behavior: none on html prevents the bounce from propagating
+     * to the document root. Individual scrollable containers still bounce. */
+    overscroll-behavior: none;
+    /* Smooth momentum scrolling on iOS for the document root */
+    -webkit-overflow-scrolling: touch;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Familjen Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    /* Prevent horizontal overflow at the document level — catches any
+     * rogue element that might push past 100vw on narrow screens. */
+    overflow-x: hidden;
+    /* Allow vertical scrolling — the feed needs it */
+    overflow-y: auto;
+    /* Constrain to viewport width on all mobile screens */
+    max-width: 100vw;
+  }
+}
+
+@layer utilities {
+  .container {
+    @apply mx-auto px-4;
+    /* No max-width — layout fills full viewport width and scales with screen size */
+    width: 100%;
+  }
+  /* Flexbox min-size fix at ZERO specificity (:where) so any explicit
+   * min-h-* / min-w-* utility on the same element wins the cascade.
+   * The previous plain `.flex` selector tied Tailwind's own utilities and,
+   * being later in the layer, silently clobbered min-h-screen on 30 of 41
+   * usages (audit D-FLEX-MINH). */
+  :where(.flex) {
+    min-width: 0;
+    min-height: 0;
+  }
+  /* Edge color helpers */
+  .text-edge-green { color: var(--edge-green); }
+  .text-edge-red   { color: var(--edge-red); }
+}
+
+/* Owner law (2026-07-31): raw mint TEXT cannot render on light surfaces —
+   the text-primary utility remaps to the mint-ink tone in light mode. Mint
+   FILLS (bg-primary + black ink) are untouched. Dark-fixed pages (login,
+   WC2026) pin --mint-ink back to raw mint at their roots; the admin area is
+   dark-fixed via AdminShell, so this never applies there. */
+html:not(.dark) .text-primary {
+  color: var(--mint-ink);
+}
+/* Raw mint ink stays legal on BLACK surfaces regardless of the html theme —
+   black-fixed containers (Subscribe result pages, etc.) tag themselves with
+   the bg-black utility and inherit the pin. */
+html:not(.dark) .bg-black {
+  --mint-ink: var(--primary);
+}
+
+/* ── Safe area utility classes ─────────────────────────────────────────────
+ * Use these on the outermost layout containers to respect iPhone notch/home bar.
+ * pt-safe  = padding-top: env(safe-area-inset-top)
+ * pb-safe  = padding-bottom: env(safe-area-inset-bottom)
+ * pl-safe  = padding-left: env(safe-area-inset-left)
+ * pr-safe  = padding-right: env(safe-area-inset-right)
+ * ─────────────────────────────────────────────────────────────────────────── */
+.pt-safe  { padding-top:    env(safe-area-inset-top,    0px); }
+.pb-safe  { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pl-safe  { padding-left:   env(safe-area-inset-left,   0px); }
+.pr-safe  { padding-right:  env(safe-area-inset-right,  0px); }
+
+/* Sticky header accounts for notch on notched devices */
+.sticky-header-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Feed bottom padding: home indicator clearance */
+.feed-pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+}
+
+/* ── Floating mobile nav clearance (docs/plans/2026-07-18-mobile-floating-nav.md)
+   While the top-floating nav is mounted (body.dime-floating-nav-active), it
+   publishes its measured height (+8px breathing room) as --dime-floating-nav-h
+   on <html> via ResizeObserver. Reserve real document-flow space equal to that
+   height so the assembly never occludes page headings/content, and re-anchor
+   viewport-sticky page headers below it. The 112px fallback only covers the
+   single frame before the observer's first publish. */
+body.dime-floating-nav-active {
+  padding-top: var(--dime-floating-nav-h, 112px);
+}
+
+/* Viewport-sticky page headers (Tailwind `sticky top-0` on <header> — splits,
+   tracker, model-results, account) re-anchor below the floating
+   nav instead of sliding underneath it. Scoped to <header> so stickies inside
+   overflow containers (e.g. table header rows) are untouched. */
+body.dime-floating-nav-active header.sticky.top-0 {
+  top: var(--dime-floating-nav-h, 112px);
+}
+
+/* ── Scrollbar styling ────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--foreground); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--foreground); }
+
+/* (Removed 2026-07-31, audit DIME-UI-026/-041: the `.feed-tab` /
+   `.feed-tabs-scroll` block and its three !important breakpoint tiers styled a
+   class no component renders — the legacy query-tab feed page was unrouted in
+   the 2026-07-11 navigation reconstruction.) */
+
+/* Hide scrollbar but keep scrollability */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;             /* Chrome, Safari, Opera */
+}
+
+/* ── prez-game-pulse: CSS animation for scrollToGame highlight ─────────────────
+ * Applied via JS classList.add('prez-game-pulse') — no setInterval, no style leaks.
+ * 3 pulses × 400ms = 1.2s total. animationend removes the class automatically.
+ * ───────────────────────────────────────────────────────────────────────────── */
+/* Three-Color Law: mint pulse, no alpha, no shadow (transparent = absence, allowed) */
+@keyframes prezGamePulse {
+  0%   { outline-color: transparent; }
+  15%  { outline-color: #45E0A8; }
+  35%  { outline-color: transparent; }
+  55%  { outline-color: #45E0A8; }
+  75%  { outline-color: transparent; }
+  90%  { outline-color: #45E0A8; }
+  100% { outline-color: transparent; }
+}
+.prez-game-pulse {
+  border-radius: 12px;
+  outline: 2px solid transparent;
+  animation: prezGamePulse 1.5s ease-in-out forwards;
+}

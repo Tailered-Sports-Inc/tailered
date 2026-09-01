@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, viewport-fit=cover"
+    />
+    <title>Tailered — See where price and probability disagree</title>
+    <meta
+      name="description"
+      content="Tailered compares sportsbook prices against projected probability, movement, volatility, matchup context, and risk flags so every market resolves to Pass, Monitor, or Edge Detected."
+    />
+    <!-- Social cards (Open Graph + Twitter). No raster og:image asset exists yet:
+         summary card renders title+description. Add a 1200x630 image in a follow-up. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Tailered" />
+    <meta
+      property="og:title"
+      content="Tailered — See where price and probability disagree"
+    />
+    <meta
+      property="og:description"
+      content="Tailered compares sportsbook prices against projected probability so every market resolves to Pass, Monitor, or Edge Detected. 21+."
+    />
+    <meta property="og:url" content="https://tailered.ai/" />
+    <meta name="twitter:card" content="summary" />
+    <meta
+      name="twitter:title"
+      content="Tailered — See where price and probability disagree"
+    />
+    <meta
+      name="twitter:description"
+      content="Sportsbook prices vs model probability. Pass, Monitor, or Edge Detected. 21+."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Tailered brand fonts load first with display=swap: the landing (/) renders in
+         Familjen Grotesk even on slow first visits instead of silently keeping the
+         system fallback (display=optional never swaps in). -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Single-font mandate: Familjen Grotesk is the only typeface across Tailered. -->
+  </head>
+  <body>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         HTML LOADING SHELL — renders IMMEDIATELY before any JS executes.
+         Single unified loading state: covers JS parse, React hydration,
+         Suspense (null fallback), auth check, and route resolution.
+         Hides the moment React renders real visible content into #root.
+
+         ARCHITECTURE:
+         1. Shell renders at 0ms (pure HTML/CSS, no JS required)
+         2. JS loads + React hydrates → Suspense fallback=null → #root empty
+         3. Auth check fires (appUsers.me API call, ~100-300ms)
+         4. Auth resolves → lazy page chunk loads → React renders content
+         5. MutationObserver detects first non-empty child in #root subtree
+         6. Shell fades out (200ms) → removed from DOM
+
+         KEY: subtree:true + characterData:true catches React's text nodes
+         and deeply nested renders, not just direct #root children.
+         This handles the case where Suspense renders null (no direct child)
+         but the lazy component eventually renders nested content.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <style>
+      /* ── HTML Loading Shell: AI Sports Betting brand ─────────────────────── */
+      /* Appears on initial page load while JS bundle downloads + React mounts. */
+      /* Dismissed by MutationObserver the moment React renders real content.   */
+      #html-loading-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #0B0B0B;
+        z-index: 9999;
+        transition: opacity 0.25s ease;
+      }
+      #html-loading-shell.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* Tailered wordmark (text, Familjen Grotesk) */
+      .html-shell-wordmark {
+        font-family: "Familjen Grotesk", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: #ffffff;
+        margin-bottom: 24px;
+      }
+      /* Progress bar track */
+      .html-shell-bar-track {
+        width: 160px;
+        height: 3px;
+        background: #ffffff;
+        border-radius: 99px;
+        overflow: hidden;
+        margin-bottom: 12px;
+      }
+      /* Mint left-to-right fill that loops (brand law: #45E0A8, no gradients) */
+      .html-shell-bar-fill {
+        height: 100%;
+        width: 45%;
+        border-radius: 99px;
+        background: #45e0a8;
+        box-shadow: none;
+        animation: shell-bar-slide 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      }
+      @keyframes shell-bar-slide {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(400%);
+        }
+      }
+      /* "Loading..." label */
+      .html-shell-label {
+        font-family:
+          "Familjen Grotesk",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        color: #ffffff;
+        text-transform: uppercase;
+      }
+    </style>
+    <!-- Tailered loading shell: brand-kit wordmark + mint progress bar + label -->
+    <div id="html-loading-shell">
+      <!-- Tailered wordmark -->
+      <div class="html-shell-wordmark">tailered</div>
+      <!-- Mint left-to-right progress bar -->
+      <div class="html-shell-bar-track">
+        <div class="html-shell-bar-fill"></div>
+      </div>
+      <!-- Loading label -->
+      <div class="html-shell-label">Loading...</div>
+    </div>
+    <!-- React mounts here. Once React renders real content, the loading shell fades out. -->
+    <div id="root"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         SEO STATIC CONTENT — crawlable homepage HTML for search engines,
+         social preview tools, accessibility tools, and JS-disabled browsers.
+
+         ARCHITECTURE:
+         - This section is always present in the initial HTML response (no JS needed).
+         - When JS is enabled: React renders LandingPage into #root on top of this.
+           The #seo-static-content section is hidden via JS (class added below) so
+           it does not duplicate the visual landing page.
+         - When JS is disabled: <noscript> removes the hide-class, making this
+           section the visible homepage. The loading shell is also hidden via noscript.
+         - Crawlers (Googlebot, Bing, social preview tools) always see this content
+           because they fetch the raw HTML before executing JavaScript.
+
+         CONTENT: Matches the required minimum per SEO spec.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <style>
+      /* SEO static content: shown by default, hidden when JS runs */
+      #seo-static-content {
+        font-family:
+          "Familjen Grotesk",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background-color: #0B0B0B;
+        color: #ffffff;
+        padding: 48px 24px 64px;
+        max-width: 860px;
+        margin: 0 auto;
+      }
+      #seo-static-content.js-ready {
+        /* Hidden once JS runs — React LandingPage renders in #root instead */
+        display: none !important;
+      }
+      #seo-static-content .seo-eyebrow {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #45e0a8;
+        margin-bottom: 16px;
+      }
+      #seo-static-content h1 {
+        font-size: clamp(28px, 6vw, 52px);
+        font-weight: 800;
+        line-height: 1.15;
+        color: #ffffff;
+        margin: 0 0 20px;
+      }
+      #seo-static-content .seo-subtitle {
+        font-size: clamp(15px, 2.5vw, 18px);
+        font-weight: 400;
+        color: #ffffff;
+        line-height: 1.6;
+        margin-bottom: 32px;
+        max-width: 640px;
+      }
+      #seo-static-content .seo-cta {
+        display: inline-block;
+        background: #45e0a8;
+        color: #0B0B0B;
+        font-size: 15px;
+        font-weight: 700;
+        padding: 14px 28px;
+        border-radius: 8px;
+        text-decoration: none;
+        margin-bottom: 48px;
+      }
+      #seo-static-content .seo-body {
+        font-size: 15px;
+        line-height: 1.7;
+        color: #ffffff;
+        margin-bottom: 32px;
+        max-width: 720px;
+      }
+      #seo-static-content .seo-disclaimer {
+        font-size: 12px;
+        line-height: 1.6;
+        color: #ffffff;
+        border-top: 1px solid #ffffff;
+        padding-top: 24px;
+        max-width: 720px;
+      }
+      /* When JS is disabled: show the SEO content, hide the loading shell */
+    </style>
+    <noscript>
+      <style>
+        #html-loading-shell {
+          display: none !important;
+        }
+        #seo-static-content {
+          display: block !important;
+        }
+        #seo-static-content.js-ready {
+          display: block !important;
+        }
+      </style>
+    </noscript>
+    <section
+      id="seo-static-content"
+      aria-label="Tailered — Sports Betting Intelligence Software"
+    >
+      <p class="seo-eyebrow">Sports betting intelligence software</p>
+      <h1>See where price and probability disagree.</h1>
+      <p class="seo-subtitle">
+        Tailered compares sportsbook prices against projected probability,
+        movement, volatility, matchup context, and risk flags so every market
+        resolves to Pass, Monitor, or Edge Detected.
+      </p>
+      <a class="seo-cta" href="/checkout?plan=pro">Get Access</a>
+      <p class="seo-body">
+        Tailered runs 400,000 simulations per game to project probability for
+        every market, strips the book's margin for a no-vig baseline, and
+        classifies each market as Pass, Monitor, or Edge Detected. Outputs are
+        Brier-scored against closing prices. Pass is a first-class output — most
+        markets are efficiently priced, and the software says so.
+      </p>
+      <p class="seo-disclaimer">
+        21+ only. Sports betting involves risk. Tailered does not guarantee
+        profits or outcomes — analytical software for informational purposes
+        only. Bet responsibly and within your means. Gambling problem? Call
+        1-800-GAMBLER.
+      </p>
+    </section>
+    <script>
+      // Hide the SEO static content once JS is running — React LandingPage renders in #root instead.
+      // Also hide immediately on non-root paths (e.g. /feed, /login) since the SEO section is
+      // only relevant for the public homepage at /.
+      // This runs synchronously before React mounts, preventing any flash.
+      (function () {
+        var seo = document.getElementById("seo-static-content");
+        if (!seo) return;
+        // Always hide when JS runs — React renders the real LandingPage or the correct route page
+        seo.classList.add("js-ready");
+      })();
+    </script>
+    <script>
+      // ─── HTML Shell Dismissal Logic ───────────────────────────────────────────
+      // Strategy: observe #root with subtree:true so we catch React renders at
+      // ANY depth — including when Suspense fallback=null renders nothing at the
+      // top level but the lazy page eventually renders nested DOM nodes.
+      //
+      // We dismiss the shell when #root has actual visible content:
+      //   - At least one element child anywhere in the subtree, AND
+      //   - That element has non-zero dimensions (not just a React comment node)
+      //
+      // This prevents premature dismissal on React's internal fiber nodes.
+      (function () {
+        var shell = document.getElementById("html-loading-shell");
+        var root = document.getElementById("root");
+        if (!shell || !root) return;
+
+        var dismissed = false;
+        function dismiss() {
+          if (dismissed) return;
+          dismissed = true;
+          shell.classList.add("hidden");
+          // Remove from DOM after fade completes (200ms transition)
+          setTimeout(function () {
+            if (shell.parentNode) shell.parentNode.removeChild(shell);
+          }, 250);
+          obs.disconnect();
+        }
+
+        function hasVisibleContent() {
+          // Check if #root has any element descendants with actual content
+          var allEls = root.querySelectorAll("*");
+          for (var i = 0; i < allEls.length; i++) {
+            var el = allEls[i];
+            // Skip script/style/meta tags
+            var tag = el.tagName;
+            if (tag === "SCRIPT" || tag === "STYLE" || tag === "META") continue;
+            // Any real element with content = ready
+            if (
+              el.children.length > 0 ||
+              (el.textContent && el.textContent.trim().length > 0)
+            ) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        var obs = new MutationObserver(function (mutations) {
+          // Check on every mutation if real content has appeared
+          if (hasVisibleContent()) {
+            dismiss();
+          }
+        });
+
+        // subtree:true catches deeply nested React renders
+        // childList:true catches element additions/removals
+        // characterData:true catches text node changes (React text renders)
+        obs.observe(root, {
+          childList: true,
+          subtree: true,
+          characterData: true,
+        });
+
+        // Safety: force-dismiss after 8s regardless of content state
+        // This prevents the shell from blocking the UI if something goes wrong
+        setTimeout(function () {
+          if (!dismissed) {
+            console.warn(
+              "[HTML Shell] Force-dismissed after 8s safety timeout"
+            );
+            dismiss();
+          }
+        }, 8000);
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+    <!-- Structured data: SoftwareApplication + FAQ schema -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Tailered",
+        "applicationCategory": "SportsApplication",
+        "operatingSystem": "Web",
+        "description": "Tailered compares sportsbook prices against projected probability so every market resolves to Pass, Monitor, or Edge Detected.",
+        "url": "https://tailered.ai",
+        "offers": [
+          {
+            "@type": "Offer",
+            "name": "Pro Monthly",
+            "price": "49.99",
+            "priceCurrency": "USD",
+            "billingIncrement": "P1M"
+          },
+          {
+            "@type": "Offer",
+            "name": "Sharp Monthly",
+            "price": "99.99",
+            "priceCurrency": "USD",
+            "billingIncrement": "P1M"
+          },
+          {
+            "@type": "Offer",
+            "name": "Max Monthly",
+            "price": "199.99",
+            "priceCurrency": "USD",
+            "billingIncrement": "P1M"
+          }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is this a picks service?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Tailered is analytical software that prices sportsbook markets against model probability from 400,000 simulations per game and classifies each market as Pass, Monitor, or Edge Detected. What you do with a classification is your decision."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What sports are covered?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Currently MLB baseball and World Cup 2026. Additional sports are in development."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What is the difference between the Pro, Sharp and Max plans?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "All paid plans include the full projections board and Tailered Chat. Pro is $49.99/month. Sharp is $99.99/month and adds the model's own projections. Max is $199.99/month and prices every market the engine covers, first. There are no tiers of picks — every plan runs the same engine."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I cancel anytime?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Cancel anytime from your account settings. No contracts, no cancellation fees."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does this guarantee I will win?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. Nothing guarantees winning in sports betting. Tailered provides model-driven market pricing to make your evaluation sharper — most markets are priced efficiently and the most common verdict is Pass. Sports betting involves risk. Past model performance does not guarantee future results. 21+."
+            }
+          }
+        ]
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,388 @@
+/**
+ * ResetPassword page
+ *
+ * Accessed via the reset link: /reset-password?token=<rawToken>&uid=<userId>
+ *
+ * Flow:
+ *   1. Parse token + uid from URL params
+ *   2. Show password + confirm password form
+ *   3. On submit: call appUsers.resetPassword mutation
+ *   4. On success: redirect to home with success toast
+ *   5. On error: show specific error message (expired, invalid, etc.)
+ *
+ * iOS SAFARI FIX (same as LoginModal / ForgotPasswordModal):
+ *   Safari 15-17 fires native constraint validation on <form> elements BEFORE
+ *   the onSubmit event, even when noValidate is set. This causes "The string did
+ *   not match the expected pattern." on password fields when AutoFill injects
+ *   credentials. The fix is to replace <form> with <div role="form"> and use
+ *   type="button" + onClick instead of type="submit".
+ */
+
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  KeyRound,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Eye,
+  EyeOff,
+} from "lucide-react";
+
+/** Suppress any residual browser validation events — belt-and-suspenders. */
+const suppressInvalid = (e: React.InvalidEvent<HTMLInputElement>) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (typeof e.nativeEvent.stopImmediatePropagation === "function") {
+    e.nativeEvent.stopImmediatePropagation();
+  }
+};
+
+export default function ResetPassword(
+  props: {
+    /** Overrides for the /invite/:code route — otherwise URL params are used. */
+    tokenOverride?: string;
+    uidOverride?: number;
+    welcomeOverride?: boolean;
+  } = {}
+) {
+  const [, navigate] = useLocation();
+
+  // Parse URL params
+  const params = new URLSearchParams(window.location.search);
+  const rawToken = props.tokenOverride ?? params.get("token") ?? "";
+  const uidStr = params.get("uid") ?? "";
+  const uid = props.uidOverride ?? parseInt(uidStr, 10);
+  /**
+   * welcome — owner-sent claim link for a freshly created member
+   * (appUsers.createUser generateClaimLink), arriving either as the compact
+   * /invite/:code route (override) or legacy ?welcome=1. Same token mechanics
+   * as a reset; only the copy changes so a first-time member isn't told they
+   * "forgot" a password they never had.
+   */
+  const isWelcome = props.welcomeOverride ?? params.get("welcome") === "1";
+
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Validate URL params on mount. Two token eras: legacy 64-hex reset tokens
+  // and compact 22-char base64url invite tokens — mirror of the server's zod.
+  const paramsValid =
+    rawToken.length >= 20 &&
+    rawToken.length <= 64 &&
+    /^[0-9a-zA-Z_-]+$/.test(rawToken) &&
+    !isNaN(uid) &&
+    uid > 0;
+
+  useEffect(() => {
+    console.log(
+      "[ResetPassword] Mounted | uid=%s tokenLength=%d paramsValid=%s",
+      uid,
+      rawToken.length,
+      paramsValid
+    );
+  }, []);
+
+  const resetPassword = trpc.appUsers.resetPassword.useMutation({
+    onSuccess: () => {
+      setSuccess(true);
+      console.log(
+        "[ResetPassword] Password reset successful | uid=%s (auto-logged-in)",
+        uid
+      );
+      // The mutation sets the app_session cookie (auto-login), so the member
+      // is signed in the moment their password saves. Welcome claims stay on
+      // the success screen for the Connect Discord CTA; ordinary resets head
+      // straight into the app.
+      if (!isWelcome) {
+        toast.success("Password updated — you're signed in.");
+        setTimeout(() => navigate("/feed"), 2000);
+      }
+    },
+    onError: err => {
+      console.error("[ResetPassword] Reset error:", err.message);
+    },
+  });
+
+  // [FIX] Pure JS handler — NOT attached to a <form> onSubmit.
+  // Called by the button's onClick and by onKeyDown Enter on each input.
+  function handleReset() {
+    setValidationError(null);
+
+    if (password.length < 8) {
+      setValidationError("Password must be at least 8 characters.");
+      document.getElementById("rp-password")?.focus();
+      return;
+    }
+    if (password !== confirmPassword) {
+      setValidationError("Passwords do not match.");
+      document.getElementById("rp-confirm")?.focus();
+      return;
+    }
+
+    console.log("[ResetPassword] Submitting reset | uid=%s", uid);
+    resetPassword.mutate({ uid, token: rawToken, password });
+  }
+
+  // Allow Enter key to submit from either input
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleReset();
+    }
+  }
+
+  // Invalid link params
+  if (!paramsValid) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-black border border-white rounded-xl p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-white mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-white mb-2">
+            Invalid reset link
+          </h1>
+          <p className="text-white text-sm mb-6">
+            This password reset link is invalid or malformed. Please request a
+            new one.
+          </p>
+          <Button
+            onClick={() => navigate("/login")}
+            className="bg-[#45E0A8] text-black"
+          >
+            Back to log in
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Success state
+  if (success) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-black border border-white rounded-xl p-8 text-center">
+          <CheckCircle2 className="w-12 h-12 text-[#45E0A8] mx-auto mb-4" />
+          <h1 className="text-xl font-bold text-white mb-2">
+            {isWelcome ? "You're all set" : "Password reset"}
+          </h1>
+          <p className="text-white text-sm mb-2">
+            {isWelcome
+              ? "Your password is saved, your account is active, and you're signed in."
+              : "Your password has been updated. All existing sessions have been logged out."}
+          </p>
+          {isWelcome ? (
+            <div className="mt-5 space-y-3">
+              {/* Server-side OAuth entry — requires the session cookie the reset
+                mutation just set. The callback links Discord and role sync
+                assigns every entitled role automatically. */}
+              <Button
+                onClick={() => {
+                  window.location.href = "/api/auth/discord/connect";
+                }}
+                className="w-full"
+              >
+                Connect Discord — get your member roles
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate("/feed")}
+                className="w-full border-white text-white"
+              >
+                Enter the Platform
+              </Button>
+            </div>
+          ) : (
+            <p className="text-white text-xs">Taking you to the platform…</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const serverError = resetPassword.error?.message;
+
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-black border border-white rounded-xl p-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-black flex items-center justify-center">
+            <KeyRound className="w-5 h-5 text-[#45E0A8]" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-white">
+              {isWelcome ? "Welcome — set your password" : "Reset password"}
+            </h1>
+            <p className="text-white text-xs">
+              {isWelcome
+                ? "Your account is ready. Choose a password to start using it."
+                : "Enter your new password below"}
+            </p>
+          </div>
+        </div>
+
+        {/*
+          [FIX] <div role="form"> instead of <form>.
+          Safari's constraint validation API only fires on <form> elements.
+          A <div> is 100% invisible to Safari's validation engine.
+          Keyboard submission is handled via onKeyDown on each input.
+          Screen readers: role="form" + aria-label preserve accessibility.
+        */}
+        <div
+          role="form"
+          aria-label="Reset Password"
+          className="flex flex-col gap-4"
+        >
+          {/* New Password */}
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="rp-password"
+              className="text-xs font-semibold tracking-widest text-white uppercase"
+            >
+              New Password
+            </Label>
+            <div className="relative">
+              {/* [FIX] type="password" always + -webkit-text-security for show/hide; no name attr (removes Safari adjacency pattern Signal 5, 6) */}
+              <Input
+                id="rp-password"
+                type="password"
+                autoComplete="new-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="At least 8 characters"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onInvalid={suppressInvalid}
+                disabled={resetPassword.isPending}
+                aria-invalid={
+                  Boolean(validationError || serverError) || undefined
+                }
+                aria-describedby={
+                  validationError || serverError ? "rp-error" : undefined
+                }
+                style={
+                  showPassword
+                    ? ({ WebkitTextSecurity: "none" } as React.CSSProperties)
+                    : undefined
+                }
+                className="bg-black border-white text-white placeholder:text-[color:var(--text-muted)] focus:border-[#45E0A8] pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white transition-colors"
+                tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Confirm Password */}
+          <div className="flex flex-col gap-1.5">
+            <Label
+              htmlFor="rp-confirm"
+              className="text-xs font-semibold tracking-widest text-white uppercase"
+            >
+              Confirm Password
+            </Label>
+            <div className="relative">
+              {/* [FIX] type="password" always + -webkit-text-security for show/hide; no name attr */}
+              <Input
+                id="rp-confirm"
+                type="password"
+                autoComplete="new-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="Repeat new password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onInvalid={suppressInvalid}
+                disabled={resetPassword.isPending}
+                style={
+                  showConfirm
+                    ? ({ WebkitTextSecurity: "none" } as React.CSSProperties)
+                    : undefined
+                }
+                className="bg-black border-white text-white placeholder:text-[color:var(--text-muted)] focus:border-[#45E0A8] pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white transition-colors"
+                tabIndex={-1}
+                aria-label={showConfirm ? "Hide password" : "Show password"}
+              >
+                {showConfirm ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Validation / Server error */}
+          {(validationError || serverError) && (
+            <div
+              id="rp-error"
+              role="alert"
+              className="flex items-start gap-2 text-white text-sm bg-black border border-white rounded-lg px-3 py-2"
+            >
+              <AlertCircle
+                className="w-4 h-4 flex-shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+              <span>{validationError ?? serverError}</span>
+            </div>
+          )}
+
+          {/* [FIX] type="button" + onClick — not type="submit". No <form> to submit. */}
+          <Button
+            type="button"
+            onClick={handleReset}
+            disabled={resetPassword.isPending || !password || !confirmPassword}
+            className="w-full bg-[#45E0A8] text-black mt-1"
+          >
+            {resetPassword.isPending ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Resetting...
+              </span>
+            ) : isWelcome ? (
+              "Set password & continue"
+            ) : (
+              "Reset password"
+            )}
+          </Button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/login")}
+            className="text-white text-xs text-center transition-colors"
+          >
+            Back to log in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
