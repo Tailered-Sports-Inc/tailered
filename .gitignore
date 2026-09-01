@@ -1,0 +1,46 @@
+# Allowlist posture: deny everything, then allow only known-safe paths.
+# Adding a new top-level area REQUIRES a new allow rule here — this is a security control.
+*
+
+# --- allowed: root governance & config ---
+!/.gitignore
+!/.gitleaks.toml
+!/README.md
+!/LICENSE
+!/AGENTS.md
+!/DESIGN.md
+!/.env.example
+!/package.json
+!/pnpm-lock.yaml
+!/tsconfig.json
+!/vite.config.ts
+!/index.html
+
+# --- allowed: directories (and their contents) ---
+!/.github/
+!/.github/**
+!/scripts/
+!/scripts/**
+!/src/
+!/src/**
+!/shared/
+!/shared/**
+!/public/
+!/public/**
+!/brand/
+!/brand/**
+
+# --- never, even if a rule above would allow it ---
+**/.env
+**/.env.*
+!/.env.example
+**/*.pem
+**/*.key
+**/*.p12
+**/id_rsa*
+**/secrets*
+**/*secret*.json
+**/.dev.vars
+node_modules/
+dist/
+.DS_Store

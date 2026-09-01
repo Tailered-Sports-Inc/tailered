@@ -1,0 +1,20 @@
+# gitleaks config for the public Tailered repo.
+# Uses the built-in ruleset (AWS/GCP/Stripe/GitHub/JWT/generic-secret, etc.).
+# NOTE: we deliberately ship NO .gitleaksignore — an ignore file that enumerates
+# past leaks by commit SHA is itself a signpost and must never live here.
+title = "tailered-public"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public placeholders that are safe by construction"
+regexes = [
+  # VITE_ public env placeholders in .env.example (build-time, non-secret)
+  '''VITE_[A-Z0-9_]+=.*''',
+  # Stripe *publishable* keys are public by design
+  '''pk_(test|live)_[A-Za-z0-9]+''',
+]
+paths = [
+  '''\.env\.example''',
+]
