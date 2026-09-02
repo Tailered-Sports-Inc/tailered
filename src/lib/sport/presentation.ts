@@ -5,20 +5,17 @@
  * data and the shared interface. Every sport is converted by a typed adapter in
  * `sportAdapters`; no league-specific `if` chains live in React components. The
  * adapters only RE-SHAPE and RE-LABEL already-computed data — every price, edge,
- * and projection is preserved exactly (the decision engine in gameInsight.ts and
- * edgeUtils.ts remains the single source of the numbers).
+ * and projection is preserved exactly. Recommendations and rankings arrive as
+ * display-only decisions from the private engine; this shell never derives them.
  *
  * Home/away is carried by explicit participant identity and event role, never by
  * row order. For soccer, a participant's country name, ISO code, and flag are
  * resolved together from one FIFA code (countries.ts), so they can never invert.
  */
-import {
-  rankMarkets,
-  primaryInsight,
-  type MarketInsight,
-  type MarketSideInput,
-} from "@/lib/gameInsight";
-import { parseAmerican } from "@/components/projections/fromFeedSpec";
+import type {
+  DecisionSummaryDisplay,
+  MarketDecisionDisplay,
+} from "@shared/types";
 import { countryIdentity, isRawCountryCode } from "./countries";
 
 // ─── The sport universe ──────────────────────────────────────────────────────
@@ -68,6 +65,7 @@ export type SelectionRole =
 /** One selectable side of a market, bound to a participant where applicable. */
 export interface MarketSelectionModel {
   id: string;
+  sideKey: string;
   role: SelectionRole;
   /** Rendered label — participant-resolved, never a raw country code. */
   label: string;
@@ -77,6 +75,7 @@ export interface MarketSelectionModel {
   flag?: string | null;
   bookPrice: number | null;
   modelPrice: number | null;
+  decision: MarketDecisionDisplay;
 }
 
 export interface MarketPresentationModel {
@@ -90,12 +89,6 @@ export interface MarketPresentationModel {
   resultLabel?: string;
   /** True when resultLabel carries a real edge (mint footer styling). */
   resultIsEdge?: boolean;
-}
-
-/** The existing projection/decision output, unchanged — just carried along. */
-export interface ProjectionSummaryModel {
-  primary: MarketInsight | null;
-  ranked: MarketInsight[];
 }
 
 export interface SportPresentationModel {
@@ -112,7 +105,7 @@ export interface SportPresentationModel {
   /** Secondary context line — pitchers, round, etc. */
   contextLine?: string;
   markets: MarketPresentationModel[];
-  projection: ProjectionSummaryModel;
+  decisionSummary: DecisionSummaryDisplay;
 }
 
 // ─── Double chance (soccer) — resolved through participant identity ──────────
@@ -160,12 +153,15 @@ export interface FeedTeamLike {
   score?: string | null;
 }
 export interface FeedRowLike {
+  sideKey: string;
   label: string;
   book: string;
   model: string;
   crest?: FeedCrestLike | null;
+  decision: MarketDecisionDisplay;
 }
 export interface FeedMarketLike {
+  decisionKey: string;
   title: string;
   rows: FeedRowLike[];
   foot: { label: string; edge: boolean };
@@ -183,6 +179,7 @@ export interface FeedEventLike {
   pitchers?: { away: string; home: string } | null;
   venueLine?: string | null;
   markets: FeedMarketLike[];
+  decisionSummary?: DecisionSummaryDisplay;
 }
 
 export interface AdapterContext {
@@ -269,25 +266,16 @@ function footOf(
   return { resultLabel: label, resultIsEdge: true };
 }
 
-/** Pair each side with the opposite side's book price so no-vig math has both. */
-function sidesFromMarket(m: MarketPresentationModel): MarketSideInput[] {
-  const n = m.selections.length;
-  return m.selections.map((sel, i) => ({
-    marketKey: m.key,
-    marketLabel: m.label,
-    sideLabel: sel.label,
-    bookPrice: sel.bookPrice,
-    bookOppPrice: n === 2 ? m.selections[n - 1 - i].bookPrice : undefined,
-    modelPrice: sel.modelPrice,
-  }));
+function parseAmerican(s: string | null | undefined): number | null {
+  if (s == null) return null;
+  const parsed = Number(s.replace(/[−–]/g, "-").replace(/[^0-9.+-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function projectionOf(
-  markets: MarketPresentationModel[]
-): ProjectionSummaryModel {
-  const sides = markets.flatMap(sidesFromMarket);
-  return { primary: primaryInsight(sides), ranked: rankMarkets(sides) };
-}
+const unavailableSummary: DecisionSummaryDisplay = {
+  mode: "unavailable",
+  items: [],
+};
 
 // ─── Team-sport adapter (MLB / NFL / NBA / NHL / NCAAF / NCAAM) ───────────────
 // Team codes (NYY, LAL) are conventional and stay as-is; only the country rule
@@ -366,13 +354,15 @@ function teamMarkets(
   home: Participant
 ): MarketPresentationModel[] {
   return raw.markets.map(m => {
-    const key = m.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const key = m.decisionKey;
     const selections: MarketSelectionModel[] = m.rows.map((row, i) => ({
       id: `${key}-${i}`,
+      sideKey: row.sideKey,
       role: teamRoleFor(i, row.label),
       label: teamSideLabel(m.title, row.label, away, home),
       bookPrice: parseAmerican(row.book),
       modelPrice: parseAmerican(row.model),
+      decision: row.decision,
     }));
     return {
       key,
@@ -408,7 +398,7 @@ function createTeamPresentation(
       contextLine: status === "scheduled" ? raw.meta || undefined : undefined,
       startTime: startTimeOf(raw, status),
       markets,
-      projection: projectionOf(markets),
+      decisionSummary: raw.decisionSummary ?? unavailableSummary,
     };
   };
 }
@@ -463,10 +453,7 @@ function soccerMarket(
 ): MarketPresentationModel {
   // Key from the full title (tag included, so tagged and untagged variants
   // stay distinct); trim edge hyphens left by trailing symbols like ")".
-  const key = m.title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  const key = m.decisionKey;
   // "(90 Min)" scope tag (owner directive 2026-07-18): when a card carries a
   // match-WINNER market, its 90-minute-scoped markets say so in their headers.
   // The tag is display-only — strip it before matching the market shape so
@@ -492,11 +479,13 @@ function soccerMarket(
     participant?: Participant
   ): MarketSelectionModel => ({
     id: `${key}-${i}`,
+    sideKey: m.rows[i].sideKey,
     role,
     label,
     participantId: participant?.id,
     flag: participant?.flag ?? null,
     ...price(m.rows[i]),
+    decision: m.rows[i].decision,
   });
 
   let selections: MarketSelectionModel[];
@@ -614,7 +603,7 @@ export const createSoccerPresentation: SportAdapter = (raw, ctx) => {
     contextLine: raw.meta || undefined,
     startTime: startTimeOf(raw, status),
     markets,
-    projection: projectionOf(markets),
+    decisionSummary: raw.decisionSummary ?? unavailableSummary,
   };
 };
 

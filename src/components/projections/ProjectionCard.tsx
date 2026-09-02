@@ -1,4 +1,4 @@
-import { rankMarkets, type MarketInsight } from "@/lib/gameInsight";
+import type { DecisionSummaryItem, DisplayInsight } from "@shared/types";
 import { MatchupPanel } from "./MatchupPanel";
 import { MlbPregamePanel } from "./MlbPregamePanel";
 import { ProjectionMarketsPopover } from "./ProjectionMarketsPopover";
@@ -30,13 +30,33 @@ import "./ProjectionCard.css";
  */
 /** Every actionable edge on the game, ranked strongest → weakest by the
  *  decision engine, at most one side per market. */
-export function rankedEdges(game: ProjectionGame): MarketInsight[] {
-  const seen = new Set<string>();
-  return rankMarkets(game.markets.flatMap(m => m.sides)).filter(m => {
-    if (m.recommendation === "NO_EDGE" || seen.has(m.marketKey)) return false;
-    seen.add(m.marketKey);
-    return true;
-  });
+function joinDisplayInsight(
+  game: ProjectionGame,
+  item: DecisionSummaryItem,
+): DisplayInsight | null {
+  const side = game.markets
+    .find(market => market.key === item.marketKey)
+    ?.sides.find(candidate => candidate.sideKey === item.sideKey);
+  if (
+    !side ||
+    typeof side.bookPrice !== "number" ||
+    typeof side.modelPrice !== "number"
+  ) {
+    return null;
+  }
+  return {
+    ...item,
+    sideLabel: side.sideLabel,
+    bookPrice: side.bookPrice,
+    modelFairPrice: side.modelPrice,
+  };
+}
+
+export function rankedEdges(game: ProjectionGame): DisplayInsight[] {
+  if (game.decisionSummary.mode !== "edge") return [];
+  return game.decisionSummary.items
+    .map(item => joinDisplayInsight(game, item))
+    .filter((item): item is DisplayInsight => item !== null);
 }
 
 /**
@@ -46,24 +66,11 @@ export function rankedEdges(game: ProjectionGame): MarketInsight[] {
  * WATCH/BET. `roiPct` is the product's canonical no-vig ROI, so this order is
  * independent of raw probability-edge and posted-price EV order.
  */
-export function rankedNoEdgeCandidates(game: ProjectionGame): MarketInsight[] {
-  const seen = new Set<string>();
-  return rankMarkets(game.markets.flatMap(m => m.sides))
-    .filter(insight => insight.recommendation === "NO_EDGE")
-    .sort((a, b) => {
-      const aRoi = a.roiPct ?? Number.NEGATIVE_INFINITY;
-      const bRoi = b.roiPct ?? Number.NEGATIVE_INFINITY;
-      if (bRoi !== aRoi) return bRoi - aRoi;
-      if (b.edgePP !== a.edgePP) return b.edgePP - a.edgePP;
-      if (b.evUnits !== a.evUnits) return b.evUnits - a.evUnits;
-      const marketOrder = a.marketKey.localeCompare(b.marketKey);
-      return marketOrder || a.sideLabel.localeCompare(b.sideLabel);
-    })
-    .filter(insight => {
-      if (seen.has(insight.marketKey)) return false;
-      seen.add(insight.marketKey);
-      return true;
-    });
+export function rankedNoEdgeCandidates(game: ProjectionGame): DisplayInsight[] {
+  if (game.decisionSummary.mode !== "no-edge") return [];
+  return game.decisionSummary.items
+    .map(item => joinDisplayInsight(game, item))
+    .filter((item): item is DisplayInsight => item !== null);
 }
 
 export function ProjectionCard({

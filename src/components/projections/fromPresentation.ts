@@ -36,11 +36,12 @@ function marketToProjection(m: MarketPresentationModel): ProjectionMarket {
   const n = m.selections.length;
   const sides: ProjectionMarketSide[] = m.selections.map((sel, i) => ({
     marketKey: m.key,
+    sideKey: sel.sideKey,
     marketLabel: m.label,
     sideLabel: sel.label,
     bookPrice: sel.bookPrice,
-    bookOppPrice: n === 2 ? m.selections[n - 1 - i].bookPrice : undefined,
     modelPrice: sel.modelPrice,
+    decision: sel.decision,
     flag: sel.flag ?? null,
   }));
   return {
@@ -67,5 +68,6 @@ export function presentationToProjectionGame(
     venue: model.venue,
     startTime: model.startTime,
     markets: model.markets.map(marketToProjection),
+    decisionSummary: model.decisionSummary,
   };
 }

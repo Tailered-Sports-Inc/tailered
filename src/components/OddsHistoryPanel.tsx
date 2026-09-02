@@ -49,6 +49,9 @@ import { useId, useState } from "react";
 import { ChevronDown, Clock, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useIsMdUp } from "@/hooks/useIsMdUp";
+import { MLB_BY_ABBREV, MLB_BY_DB_SLUG } from "@shared/mlbTeams";
+import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
+import { NHL_BY_ABBREV, NHL_BY_DB_SLUG } from "@shared/nhlTeams";
 // The panel's .ohp-* styles ride whichever chunk renders it (NOT the chat
 // critical path) — importing here covers every direct consumer, including
 // PublishProjections, regardless of navigation order.
@@ -692,35 +695,19 @@ export function OddsHistoryPanel({
   });
   const { data, isLoading, error } = demo ? demoQuery : gatedQuery;
 
-  // ── Team colors + logos (try MLB → NHL → NBA) ──────────────────────────────
-  const { data: colorsMlb } = trpc.teamColors.getForGame.useQuery(
-    { awayTeam, homeTeam, sport: "MLB" },
-    { staleTime: 3_600_000, enabled: open }
-  );
-  const { data: colorsNhl } = trpc.teamColors.getForGame.useQuery(
-    { awayTeam, homeTeam, sport: "NHL" },
-    { staleTime: 3_600_000, enabled: open && !colorsMlb?.away?.logoUrl }
-  );
-  const { data: colorsNba } = trpc.teamColors.getForGame.useQuery(
-    { awayTeam, homeTeam, sport: "NBA" },
-    {
-      staleTime: 3_600_000,
-      enabled: open && !colorsMlb?.away?.logoUrl && !colorsNhl?.away?.logoUrl,
-    }
-  );
-
-  const colors = colorsMlb?.away?.logoUrl
-    ? colorsMlb
-    : colorsNhl?.away?.logoUrl
-      ? colorsNhl
-      : colorsNba?.away?.logoUrl
-        ? colorsNba
-        : colorsMlb;
-
-  const awayLogo = colors?.away?.logoUrl;
-  const homeLogo = colors?.home?.logoUrl;
-  const awayAbbrev = colors?.away?.abbrev ?? awayTeam;
-  const homeAbbrev = colors?.home?.abbrev ?? homeTeam;
+  // Static public team identity does not need an API round-trip.
+  const team = (slug: string) =>
+    getNbaTeamByDbSlug(slug) ??
+    NHL_BY_DB_SLUG.get(slug) ??
+    NHL_BY_ABBREV.get(slug.toUpperCase()) ??
+    MLB_BY_DB_SLUG.get(slug) ??
+    MLB_BY_ABBREV.get(slug.toUpperCase());
+  const awayIdentity = team(awayTeam);
+  const homeIdentity = team(homeTeam);
+  const awayLogo = awayIdentity?.logoUrl;
+  const homeLogo = homeIdentity?.logoUrl;
+  const awayAbbrev = awayIdentity?.abbrev ?? awayTeam;
+  const homeAbbrev = homeIdentity?.abbrev ?? homeTeam;
 
   const rawRows = (data?.history ?? []) as HistoryRow[];
 

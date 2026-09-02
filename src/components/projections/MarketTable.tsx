@@ -1,4 +1,3 @@
-import { scoreMarketSide } from "@/lib/gameInsight";
 import type { ProjectionMarket } from "./types";
 
 /**
@@ -19,12 +18,17 @@ function fmtPrice(p: number | null | undefined): string {
 
 export function MarketTable({ market }: { market: ProjectionMarket }) {
   // Which side (if any) is the signal? Highest positive edge among this market's sides.
-  const scored = market.sides.map(s => scoreMarketSide(s));
   let signalIdx = -1;
-  let best = 0;
-  scored.forEach((m, i) => {
-    if (m && m.recommendation !== "NO_EDGE" && m.edgePP > best) {
-      best = m.edgePP;
+  let best = Number.NEGATIVE_INFINITY;
+  market.sides.forEach((side, i) => {
+    const decision = side.decision;
+    if (
+      decision.recommendation !== "UNAVAILABLE" &&
+      decision.recommendation !== "NO_EDGE" &&
+      decision.edgePP != null &&
+      decision.edgePP > best
+    ) {
+      best = decision.edgePP;
       signalIdx = i;
     }
   });
