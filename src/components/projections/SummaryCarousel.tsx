@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { MarketInsight } from "@/lib/gameInsight";
+import type { DisplayInsight } from "@shared/types";
 import { ProjectionSummary } from "./ProjectionSummary";
 import type { ProjectionTeam } from "./types";
 
@@ -28,7 +28,7 @@ export function SummaryCarousel({
   teams = [],
   variant = "edge",
 }: {
-  insights: MarketInsight[];
+  insights: DisplayInsight[];
   teams?: ProjectionTeam[];
   variant?: "edge" | "no-edge";
 }) {

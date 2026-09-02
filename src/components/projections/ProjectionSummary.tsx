@@ -1,6 +1,6 @@
 import { ArrowRight } from "lucide-react";
 import { EdgeIndicator } from "./EdgeIndicator";
-import type { MarketInsight } from "@/lib/gameInsight";
+import type { DisplayInsight } from "@shared/types";
 import type { ProjectionTeam } from "./types";
 
 /**
@@ -44,7 +44,7 @@ export function ProjectionSummary({
   nextEdgeTabIndex = 0,
   nextEdgeButtonRef,
 }: {
-  insight: MarketInsight | null;
+  insight: DisplayInsight | null;
   teams?: ProjectionTeam[];
   /** False when the game has NO published model output — see ProjectionGame. */
   modelPublished?: boolean;

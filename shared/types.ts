@@ -22,6 +22,38 @@ export type BetTimeframe =
   | "FIRST_HALF"
   | "FIRST_QUARTER";
 
+export type DisplayRecommendation =
+  | "BET"
+  | "WATCH"
+  | "NO_EDGE"
+  | "UNAVAILABLE";
+
+/** Display-only decision returned by the private API. The shell never derives it. */
+export interface MarketDecisionDisplay {
+  edgePP: number | null;
+  roiPct: number | null;
+  modelProbabilityPct: number | null;
+  recommendation: DisplayRecommendation;
+  hasEdge: boolean;
+}
+
+export interface DecisionSummaryItem extends MarketDecisionDisplay {
+  marketKey: string;
+  sideKey: string;
+}
+
+export interface DecisionSummaryDisplay {
+  mode: "edge" | "no-edge" | "unavailable";
+  items: DecisionSummaryItem[];
+}
+
+/** A decision joined to display labels/prices by the shell, never recalculated. */
+export interface DisplayInsight extends DecisionSummaryItem {
+  sideLabel: string;
+  bookPrice: number;
+  modelFairPrice: number;
+}
+
 /** A single leg of a tracked (parlay or straight) bet, as shown in the UI. */
 export interface TrackedBetLeg {
   id: number;

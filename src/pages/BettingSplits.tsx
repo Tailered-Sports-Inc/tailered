@@ -30,7 +30,7 @@ const LEAGUE_LOGOS: Record<SplitsLeague, string> = {
   NBA: CDN_NBA,
 };
 
-import { GameCard } from "@/components/GameCard";
+import { SplitsGameCard } from "@/components/SplitsGameCard";
 import { AgeModal } from "@/components/AgeModal";
 import { inSeasonLeagues, type SplitsLeague } from "@/lib/leagueSeasons";
 import { toast } from "sonner";
@@ -1092,7 +1092,7 @@ export default function BettingSplitsPage({
               <div className="bg-card mx-0">
                 {gamesByDate[date]!.map(game => (
                   <div key={game!.id} id={`game-card-${game!.id}`}>
-                    <GameCard game={game!} mode="splits" />
+                    <SplitsGameCard game={game!} />
                   </div>
                 ))}
               </div>

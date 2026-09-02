@@ -1,5 +1,5 @@
 import { TrendingUp } from "lucide-react";
-import type { MarketInsight } from "@/lib/gameInsight";
+import type { DisplayInsight } from "@shared/types";
 import "./EdgeIndicator.css";
 
 /**
@@ -15,8 +15,8 @@ import "./EdgeIndicator.css";
  */
 
 /** Format a probability edge (percentage points) as a signed, 1-decimal string. */
-export function formatEdge(edgePP: number): string {
-  if (!Number.isFinite(edgePP)) return "—";
+export function formatEdge(edgePP: number | null): string {
+  if (edgePP == null || !Number.isFinite(edgePP)) return "—";
   const sign = edgePP >= 0 ? "+" : "−"; // real minus, not hyphen
   return `${sign}${Math.abs(edgePP).toFixed(1)}%`;
 }
@@ -29,7 +29,7 @@ export function formatRoi(roiPct: number | null): string {
 }
 
 export interface EdgeIndicatorProps {
-  insight: MarketInsight | null;
+  insight: DisplayInsight | null;
   className?: string;
 }
 

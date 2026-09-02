@@ -39,15 +39,13 @@ import type {
   GameStatus,
   ProjectionPregameLineups,
 } from "@/components/projections/types";
+import type {
+  DecisionSummaryDisplay,
+  MarketDecisionDisplay,
+} from "@shared/types";
 import { sportAdapters } from "@/lib/sport/presentation";
 import { MLB_BY_ABBREV } from "@shared/mlbTeams";
 import { formatGameTime, timeToMinutes } from "@/lib/gameUtils";
-import {
-  calculateEdge,
-  calculate3WayResult,
-  EDGE_THRESHOLD_PP,
-  type ThreeWayOdds,
-} from "@/lib/edgeUtils";
 import { feedModelPath, bettingSplitsPath, toFeedSlugDate } from "@/lib/feedRoutes";
 import "./dimeModelFeed.css";
 
@@ -61,14 +59,17 @@ interface CrestSpec {
   bg?: string;
 }
 interface MarketRowSpec {
+  sideKey: string;
   label: string;
   crest?: CrestSpec | null;
   book: string;
   model: string;
   sig?: boolean;
   wp?: string | null;
+  decision: MarketDecisionDisplay;
 }
 interface MarketColSpec {
+  decisionKey: string;
   title: string;
   rows: MarketRowSpec[];
   foot: { label: string; crest?: CrestSpec | null; edge: boolean };
@@ -94,16 +95,10 @@ interface FeedCardSpec {
   /** Scheduled MLB only; ignored by the sport-generic market adapter. */
   pregameLineups?: ProjectionPregameLineups;
   markets: MarketColSpec[];
+  decisionSummary: DecisionSummaryDisplay;
   /** False when this game has no published model output at all. Optional: only
    *  the MLB adapter sets it; soccer leaves it undefined (= published). */
   modelPublished?: boolean;
-  verdict: {
-    pick: string;
-    crest?: CrestSpec | null;
-    edge: string;
-    grade: string;
-    pass: boolean;
-  };
 }
 
 // ─── Shared formatting ───────────────────────────────────────────────────────
@@ -112,16 +107,17 @@ const fmtAm = (v: number | null | undefined): string =>
   v == null || Number.isNaN(v) ? "—" : v > 0 ? `+${v}` : `${v}`;
 
 const NO_EDGE = { label: "NO EDGE", edge: false } as const;
-
-/** Simple edge → letter grade tiering (matches the reference verdict strip). */
-function edgeGrade(pp: number): string {
-  if (Number.isNaN(pp) || pp < EDGE_THRESHOLD_PP) return "—";
-  if (pp >= 6) return "A";
-  if (pp >= 4.5) return "A−";
-  if (pp >= 3.5) return "B+";
-  if (pp >= 2.5) return "B";
-  return "C+";
-}
+const UNAVAILABLE_DECISION: MarketDecisionDisplay = {
+  edgePP: null,
+  roiPct: null,
+  modelProbabilityPct: null,
+  recommendation: "UNAVAILABLE",
+  hasEdge: false,
+};
+const UNAVAILABLE_SUMMARY: DecisionSummaryDisplay = {
+  mode: "unavailable",
+  items: [],
+};
 
 // ─── Presentational components ───────────────────────────────────────────────
 // (GameRow/MarketCol/TeamRow/Crest — the pre-ProjectionCard render tree — were
@@ -557,32 +553,37 @@ const n = (v: string | number | null | undefined): number | null => {
 const fmtLine = (v: number): string => (v > 0 ? `+${v}` : `${v}`);
 
 interface SideCalc {
+  sideKey: string;
   label: string;
   crest?: CrestSpec | null;
   book: number | null;
   model: number | null;
   wp?: string | null;
+  decision: MarketDecisionDisplay;
 }
 
-/** Two-sided market column: edge per side via edgeUtils (2-way).
- *  pickSuffix contextualizes bare team-code labels in footers/PICK ("ML"/"ADV"). */
+/** Display a private two-sided decision without recomputing it in the browser. */
 function twoWayCol(
+  decisionKey: string,
   title: string,
   top: SideCalc,
   bottom: SideCalc,
   pickSuffix?: string,
 ): MarketColSpec & { bestPP: number; bestSide: SideCalc | null; pickSuffix?: string } {
-  const pp = (s: SideCalc) =>
-    s.book != null && s.model != null ? calculateEdge(s.book, s.model) : NaN;
+  const pp = (side: SideCalc) => side.decision.edgePP ?? NaN;
   const topPP = pp(top);
   const botPP = pp(bottom);
   const rows: MarketRowSpec[] = [top, bottom].map((s, i) => ({
+    sideKey: s.sideKey,
     label: s.label,
     crest: s.crest,
     book: fmtAm(s.book),
     model: fmtAm(s.model),
-    sig: !Number.isNaN(i === 0 ? topPP : botPP) && (i === 0 ? topPP : botPP) >= EDGE_THRESHOLD_PP,
+    sig:
+      s.decision.recommendation === "BET" ||
+      s.decision.recommendation === "WATCH",
     wp: s.wp ?? null,
+    decision: s.decision,
   }));
   let bestPP = NaN;
   let bestSide: SideCalc | null = null;
@@ -593,11 +594,14 @@ function twoWayCol(
     bestPP = botPP;
     bestSide = bottom;
   }
-  const hasEdge = !Number.isNaN(bestPP) && bestPP >= EDGE_THRESHOLD_PP && bestSide != null;
+  const hasEdge =
+    bestSide?.decision.recommendation === "BET" ||
+    bestSide?.decision.recommendation === "WATCH";
   const footLabel = hasEdge
     ? `${bestSide!.label}${pickSuffix ? ` ${pickSuffix}` : ""} · +${bestPP.toFixed(1)}%`
     : NO_EDGE.label;
   return {
+    decisionKey,
     title,
     rows,
     foot: hasEdge
@@ -608,29 +612,6 @@ function twoWayCol(
       ? { ...bestSide!, label: `${bestSide!.label}${pickSuffix ? ` ${pickSuffix}` : ""}` }
       : null,
     pickSuffix,
-  };
-}
-
-interface BestPick {
-  pp: number;
-  label: string;
-  crest?: CrestSpec | null;
-}
-function trackBest(best: BestPick | null, col: { bestPP: number; bestSide: SideCalc | null }): BestPick | null {
-  if (col.bestSide == null || Number.isNaN(col.bestPP)) return best;
-  if (best == null || col.bestPP > best.pp)
-    return { pp: col.bestPP, label: col.bestSide.label, crest: col.bestSide.crest };
-  return best;
-}
-function verdictOf(best: BestPick | null): FeedCardSpec["verdict"] {
-  if (best == null)
-    return { pick: "PASS", edge: "—", grade: "—", pass: true };
-  return {
-    pick: best.label,
-    crest: best.crest,
-    edge: `+${best.pp.toFixed(1)}%`,
-    grade: edgeGrade(best.pp),
-    pass: false,
   };
 }
 
@@ -670,32 +651,39 @@ export function mlbRowToCard(
   // Model freshness gate — modelRunAt null ⇒ model invalidated (GameCard rule).
   const hasModel = g.modelRunAt != null;
   const M = <T,>(v: T | null): T | null => (hasModel ? v : null);
+  const decision = g.decision;
 
   // RUN LINE — VSiN run line authoritative, book-spread fallback (GameCard 841).
   const awayRl = n(g.awayRunLine) ?? n(g.awayBookSpread);
   const homeRl = n(g.homeRunLine) ?? n(g.homeBookSpread);
   const rl = twoWayCol(
+    "runLine",
     "Run Line",
     {
+      sideKey: "away",
       label: awayRl != null ? `${awayAbbr} ${fmtLine(awayRl)}` : awayAbbr,
       crest: awayCrest,
       book: n(g.awayRunLineOdds),
       model: M(n(g.modelAwaySpreadOdds) ?? n(g.modelAwayPLOdds)),
+      decision: decision?.runLine?.away ?? UNAVAILABLE_DECISION,
     },
     {
+      sideKey: "home",
       label: homeRl != null ? `${homeAbbr} ${fmtLine(homeRl)}` : homeAbbr,
       crest: homeCrest,
       book: n(g.homeRunLineOdds),
       model: M(n(g.modelHomeSpreadOdds) ?? n(g.modelHomePLOdds)),
+      decision: decision?.runLine?.home ?? UNAVAILABLE_DECISION,
     },
   );
 
   // TOTAL — O above U (owner row order).
   const totalLine = n(g.bookTotal);
   const total = twoWayCol(
+    "total",
     "Total",
-    { label: totalLine != null ? `O ${totalLine}` : "OVER", book: n(g.overOdds), model: M(n(g.modelOverOdds)) },
-    { label: totalLine != null ? `U ${totalLine}` : "UNDER", book: n(g.underOdds), model: M(n(g.modelUnderOdds)) },
+    { sideKey: "over", label: totalLine != null ? `O ${totalLine}` : "OVER", book: n(g.overOdds), model: M(n(g.modelOverOdds)), decision: decision?.total?.over ?? UNAVAILABLE_DECISION },
+    { sideKey: "under", label: totalLine != null ? `U ${totalLine}` : "UNDER", book: n(g.underOdds), model: M(n(g.modelUnderOdds)), decision: decision?.total?.under ?? UNAVAILABLE_DECISION },
   );
 
   // MONEYLINE — away top; win% annotation on the model favorite (page spec).
@@ -703,26 +691,28 @@ export function mlbRowToCard(
   const homeWp = n(g.modelHomeWinPct);
   const favIsAway = awayWp != null && homeWp != null ? awayWp >= homeWp : false;
   const ml = twoWayCol(
+    "moneyline",
     "Moneyline",
     {
+      sideKey: "away",
       label: awayAbbr,
       crest: awayCrest,
       book: n(g.awayML),
       model: M(n(g.modelAwayML)),
       wp: hasModel && favIsAway && awayWp != null ? `${Math.round(awayWp)}%` : null,
+      decision: decision?.moneyline?.away ?? UNAVAILABLE_DECISION,
     },
     {
+      sideKey: "home",
       label: homeAbbr,
       crest: homeCrest,
       book: n(g.homeML),
       model: M(n(g.modelHomeML)),
       wp: hasModel && !favIsAway && homeWp != null ? `${Math.round(homeWp)}%` : null,
+      decision: decision?.moneyline?.home ?? UNAVAILABLE_DECISION,
     },
     "ML",
   );
-
-  let best: BestPick | null = null;
-  for (const col of [rl, total, ml]) best = trackBest(best, col);
 
   // Ballpark only in the matchup context. Scheduled probable pitchers now own a
   // dedicated middle panel, so they still never pollute or duplicate this line.
@@ -771,8 +761,8 @@ export function mlbRowToCard(
     venueLine: g.venue || null,
     pregameLineups,
     markets: [rl, total, ml],
+    decisionSummary: decision?.summary ?? UNAVAILABLE_SUMMARY,
     modelPublished: hasModel,
-    verdict: verdictOf(best),
   };
 }
 
@@ -829,26 +819,6 @@ function fmtKickoffEt(kickoffUtc: string | Date | null | undefined): string {
   );
 }
 
-/** Owner winner-scope markets (2026-07-18): the two remaining WC matches
- *  replace their MONEYLINE column with a match-WINNER market — graded on
- *  whoever wins the match when it settles, regardless of 90'+injury time,
- *  extra time, or penalties. Book prices are OWNER-PROVIDED (2026-07-18).
- *  Model prices are the v27 engine's model_*_to_advance (ET+pens
- *  sub-simulation: P(win 90') + P(draw)×[ET λ/3 + pens 50.5/49.5]) — for
- *  these two matches that is literally "wins the match outright" (engine
- *  header, v27_jul18_engine.mjs), i.e. the exact same grading scope. They
- *  reach the card as mo.toAdvanceHome/Away via wc2026_model_projections.
- *  homeCode/awayCode pin the v27-verified orientation (FRA home vs ENG away;
- *  ESP home vs ARG away) — if the live row ever disagreed, the card falls
- *  back to the plain 3-way ML rather than misassign the owner book prices. */
-export const WC_WINNER_MARKETS: Record<
-  string,
-  { title: string; homeCode: string; awayCode: string; bookHome: number; bookAway: number }
-> = {
-  "wc26-3rd-103": { title: "World Cup 3rd Place", homeCode: "FRA", awayCode: "ENG", bookHome: -215, bookAway: 170 },
-  "wc26-final-104": { title: "To Win the World Cup", homeCode: "ESP", awayCode: "ARG", bookHome: -150, bookAway: 130 },
-};
-
 function wcMatchToCard(m: WcMatch, isoDate: string): FeedCardSpec {
   const awayCode = m.awayTeam?.fifaCode ?? m.awayTeamId.toUpperCase();
   const homeCode = m.homeTeam?.fifaCode ?? m.homeTeamId.toUpperCase();
@@ -856,32 +826,21 @@ function wcMatchToCard(m: WcMatch, isoDate: string): FeedCardSpec {
   const homeCrest: CrestSpec = { url: m.homeTeam?.flagUrl ?? fifaFlagUrl(homeCode), code: homeCode };
   const dk = m.dkOdds;
   const mo = m.modelOdds;
+  const decision = m.decision;
 
-  // Winner-scope override applies ONLY when the live orientation matches the
-  // v27-verified home/away — the owner book prices bind positionally.
-  const winnerSpec = WC_WINNER_MARKETS[m.matchId];
-  const winnerApplies =
-    winnerSpec != null && winnerSpec.homeCode === homeCode && winnerSpec.awayCode === awayCode;
+  // The private engine alone owns winner-market prices and orientation checks.
+  const winnerSpec = decision?.winner;
+  const winnerApplies = winnerSpec != null;
   // Clarity rule (owner directive 2026-07-18): with the winner market on the
   // card, the 90-minute-scoped markets say so in their headers.
   const t90 = (title: string): string => (winnerApplies ? `${title} (90 Min)` : title);
 
-  // 3-way calc for ML + DRAW (WcMktCol rule) — also yields the win% annotation.
-  const threeWayBook: ThreeWayOdds | null =
-    dk?.home != null && dk?.draw != null && dk?.away != null
-      ? { home: dk.home, draw: dk.draw, away: dk.away }
-      : null;
-  const threeWayModel: ThreeWayOdds | null =
-    mo?.home != null && mo?.draw != null && mo?.away != null
-      ? { home: mo.home, draw: mo.draw, away: mo.away }
-      : null;
-  const calc3 = threeWayBook && threeWayModel ? calculate3WayResult(threeWayBook, threeWayModel) : null;
-
   // TO ADV — away top (dkOdds.toAdvanceAway), home bottom.
   const toAdv = twoWayCol(
+    "toAdvance",
     "To Adv",
-    { label: awayCode, crest: awayCrest, book: dk?.toAdvanceAway ?? null, model: mo?.toAdvanceAway ?? null },
-    { label: homeCode, crest: homeCrest, book: dk?.toAdvanceHome ?? null, model: mo?.toAdvanceHome ?? null },
+    { sideKey: "away", label: awayCode, crest: awayCrest, book: dk?.toAdvanceAway ?? null, model: mo?.toAdvanceAway ?? null, decision: decision?.toAdvance?.away ?? UNAVAILABLE_DECISION },
+    { sideKey: "home", label: homeCode, crest: homeCrest, book: dk?.toAdvanceHome ?? null, model: mo?.toAdvanceHome ?? null, decision: decision?.toAdvance?.home ?? UNAVAILABLE_DECISION },
     "ADV",
   );
 
@@ -889,115 +848,102 @@ function wcMatchToCard(m: WcMatch, isoDate: string): FeedCardSpec {
   // match and the Final. Away top / home bottom (card row order). Book = the
   // owner-provided winner prices; model = mo.toAdvanceHome/Away — the v27
   // ET+pens winner odds, the exact same "wins the match however it settles"
-  // scope — so calculateEdge(book, model) inside twoWayCol IS the precise
-  // 2-way edge for this market (the model side is fair: pAdvH + pAdvA = 1).
+  // scope. The private engine supplies the decision for this market.
   const winner = winnerApplies
     ? twoWayCol(
+        "winner",
         winnerSpec.title,
-        { label: awayCode, crest: awayCrest, book: winnerSpec.bookAway, model: mo?.toAdvanceAway ?? null },
-        { label: homeCode, crest: homeCrest, book: winnerSpec.bookHome, model: mo?.toAdvanceHome ?? null },
+        { sideKey: "away", label: awayCode, crest: awayCrest, book: winnerSpec.bookAway, model: mo?.toAdvanceAway ?? null, decision: winnerSpec.away },
+        { sideKey: "home", label: homeCode, crest: homeCrest, book: winnerSpec.bookHome, model: mo?.toAdvanceHome ?? null, decision: winnerSpec.home },
       )
     : null;
-  if (process.env.NODE_ENV === "development" && winnerSpec && !winnerApplies) {
-    console.warn(
-      `[wcMatchToCard:WINNER] ${m.matchId}: live orientation ${awayCode}@${homeCode} disagrees with ` +
-        `verified ${winnerSpec.awayCode}@${winnerSpec.homeCode} — falling back to plain ML (owner odds NOT applied)`,
-    );
-  }
 
-  // ML — away top; edge/sig from the 3-way calc when available.
-  const favIsAway = calc3 ? calc3.away.modelFairProb >= calc3.home.modelFairProb : false;
+  // ML — away top; three-way decisions and probabilities arrive from private API.
+  const awayModelPct = decision?.moneyline?.away?.modelProbabilityPct;
+  const homeModelPct = decision?.moneyline?.home?.modelProbabilityPct;
+  const favIsAway =
+    awayModelPct != null && homeModelPct != null && awayModelPct >= homeModelPct;
   const ml = twoWayCol(
+    "moneyline",
     "ML",
     {
+      sideKey: "away",
       label: awayCode,
       crest: awayCrest,
       book: dk?.away ?? null,
       model: mo?.away ?? null,
-      wp: calc3 && favIsAway ? `${Math.round(calc3.away.modelFairProb * 100)}%` : null,
+      wp: awayModelPct != null && favIsAway ? `${Math.round(awayModelPct)}%` : null,
+      decision: decision?.moneyline?.away ?? UNAVAILABLE_DECISION,
     },
     {
+      sideKey: "home",
       label: homeCode,
       crest: homeCrest,
       book: dk?.home ?? null,
       model: mo?.home ?? null,
-      wp: calc3 && !favIsAway ? `${Math.round(calc3.home.modelFairProb * 100)}%` : null,
+      wp: homeModelPct != null && !favIsAway ? `${Math.round(homeModelPct)}%` : null,
+      decision: decision?.moneyline?.home ?? UNAVAILABLE_DECISION,
     },
     "ML",
   );
-  if (calc3) {
-    // Override 2-way edge flags with the 3-way results (matches WcMktCol).
-    ml.rows[0].sig = calc3.away.edgePP >= EDGE_THRESHOLD_PP;
-    ml.rows[1].sig = calc3.home.edgePP >= EDGE_THRESHOLD_PP;
-    const top = calc3.away.edgePP >= calc3.home.edgePP;
-    const pp = top ? calc3.away.edgePP : calc3.home.edgePP;
-    if (pp >= EDGE_THRESHOLD_PP) {
-      ml.foot = { label: `${top ? awayCode : homeCode} ML · +${pp.toFixed(1)}%`, crest: top ? awayCrest : homeCrest, edge: true };
-      ml.bestPP = pp;
-      ml.bestSide = { label: `${top ? awayCode : homeCode} ML`, crest: top ? awayCrest : homeCrest, book: null, model: null };
-    } else {
-      ml.foot = { ...NO_EDGE };
-      ml.bestPP = NaN;
-      ml.bestSide = null;
-    }
-  }
 
   // DRAW — DRAW top / NO DRAW bottom (owner spec). 90-min scope tagged when
   // the winner market is on the card.
   const draw = twoWayCol(
+    "draw",
     t90("Draw"),
-    { label: "DRAW", book: dk?.draw ?? null, model: mo?.draw ?? null },
-    { label: "NO DRAW", book: dk?.noDraw ?? null, model: mo?.noDraw ?? null },
+    { sideKey: "draw", label: "DRAW", book: dk?.draw ?? null, model: mo?.draw ?? null, decision: decision?.draw?.draw ?? UNAVAILABLE_DECISION },
+    { sideKey: "noDraw", label: "NO DRAW", book: dk?.noDraw ?? null, model: mo?.noDraw ?? null, decision: decision?.draw?.noDraw ?? UNAVAILABLE_DECISION },
   );
-  if (calc3) {
-    draw.rows[0].sig = calc3.draw.edgePP >= EDGE_THRESHOLD_PP;
-    if (calc3.draw.edgePP >= EDGE_THRESHOLD_PP) {
-      draw.foot = { label: `DRAW · +${calc3.draw.edgePP.toFixed(1)}%`, edge: true };
-      draw.bestPP = calc3.draw.edgePP;
-      draw.bestSide = { label: "DRAW", book: null, model: null };
-    }
-  }
 
   // TOTAL — O top / U bottom; line from dkOdds.overLine (2.5 fallback).
   const totalLine = dk?.overLine ?? 2.5;
   const total = twoWayCol(
+    "total",
     "Total",
-    { label: `O ${totalLine}`, book: dk?.overOdds ?? null, model: mo?.overOdds ?? null },
-    { label: `U ${totalLine}`, book: dk?.underOdds ?? null, model: mo?.underOdds ?? null },
+    { sideKey: "over", label: `O ${totalLine}`, book: dk?.overOdds ?? null, model: mo?.overOdds ?? null, decision: decision?.total?.over ?? UNAVAILABLE_DECISION },
+    { sideKey: "under", label: `U ${totalLine}`, book: dk?.underOdds ?? null, model: mo?.underOdds ?? null, decision: decision?.total?.under ?? UNAVAILABLE_DECISION },
   );
 
   // SPREAD — away top with its own line (awaySpreadLine = -bookPrimarySpread).
   const aLine = dk?.awaySpreadLine;
   const hLine = dk?.homeSpreadLine;
   const spread = twoWayCol(
+    "spread",
     t90("Spread"),
     {
+      sideKey: "away",
       label: aLine != null ? `${awayCode} ${fmtLine(aLine)}` : awayCode,
       crest: awayCrest,
       book: dk?.awaySpreadOdds ?? null,
       model: mo?.awaySpreadOdds ?? null,
+      decision: decision?.spread?.away ?? UNAVAILABLE_DECISION,
     },
     {
+      sideKey: "home",
       label: hLine != null ? `${homeCode} ${fmtLine(hLine)}` : homeCode,
       crest: homeCrest,
       book: dk?.homeSpreadOdds ?? null,
       model: mo?.homeSpreadOdds ?? null,
+      decision: decision?.spread?.home ?? UNAVAILABLE_DECISION,
     },
   );
 
   // DBL CHC — HOME WD top (dkOdds.homeDrawOdds) / AWAY WD bottom (owner spec),
   // each carrying the matching team's flag (Rule 4).
   const dblChc = twoWayCol(
+    "doubleChance",
     t90("Dbl Chc"),
-    { label: "HOME WD", crest: homeCrest, book: dk?.homeDrawOdds ?? null, model: mo?.homeDrawOdds ?? null },
-    { label: "AWAY WD", crest: awayCrest, book: dk?.awayDrawOdds ?? null, model: mo?.awayDrawOdds ?? null },
+    { sideKey: "home", label: "HOME WD", crest: homeCrest, book: dk?.homeDrawOdds ?? null, model: mo?.homeDrawOdds ?? null, decision: decision?.doubleChance?.home ?? UNAVAILABLE_DECISION },
+    { sideKey: "away", label: "AWAY WD", crest: awayCrest, book: dk?.awayDrawOdds ?? null, model: mo?.awayDrawOdds ?? null, decision: decision?.doubleChance?.away ?? UNAVAILABLE_DECISION },
   );
 
   // BTTS — YES top / NO bottom.
   const btts = twoWayCol(
+    "btts",
     t90("BTTS"),
-    { label: "YES", book: dk?.bttsYes ?? null, model: mo?.bttsYes ?? null },
-    { label: "NO", book: dk?.bttsNo ?? null, model: mo?.bttsNo ?? null },
+    { sideKey: "yes", label: "YES", book: dk?.bttsYes ?? null, model: mo?.bttsYes ?? null, decision: decision?.btts?.yes ?? UNAVAILABLE_DECISION },
+    { sideKey: "no", label: "NO", book: dk?.bttsNo ?? null, model: mo?.bttsNo ?? null, decision: decision?.btts?.no ?? UNAVAILABLE_DECISION },
   );
 
   // TO ADVANCE only exists as a book market when there IS a next round — the
@@ -1007,9 +953,6 @@ function wcMatchToCard(m: WcMatch, isoDate: string): FeedCardSpec {
   // Winner market takes the ML slot on the 3rd-place match and the Final
   // (owner directive 2026-07-18); every other card keeps the 3-way ML.
   const markets = [...(hasAdvMarket ? [toAdv] : []), winner ?? ml, draw, total, spread, dblChc, btts];
-  let best: BestPick | null = null;
-  for (const col of markets) best = trackBest(best, col);
-
   const status = m.status;
   const minute = m.matchMinute ?? null;
   const liveLabel =
@@ -1047,7 +990,7 @@ function wcMatchToCard(m: WcMatch, isoDate: string): FeedCardSpec {
     meta,
     venueLine: venueBits || null,
     markets,
-    verdict: verdictOf(best),
+    decisionSummary: decision?.summary ?? UNAVAILABLE_SUMMARY,
   };
 }
 

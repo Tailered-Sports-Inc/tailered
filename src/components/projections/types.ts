@@ -1,4 +1,7 @@
-import type { MarketSideInput } from "@/lib/gameInsight";
+import type {
+  DecisionSummaryDisplay,
+  MarketDecisionDisplay,
+} from "@shared/types";
 
 /** A team as the projection card renders it. `logo` is a transparent asset URL;
  *  when absent, the card falls back to a monogram disc (logo-exception color). */
@@ -21,7 +24,14 @@ export type GameStatus =
   "scheduled" | "live" | "final" | "postponed" | "suspended";
 
 /** One rendered market side: the decision-engine input plus display extras. */
-export interface ProjectionMarketSide extends MarketSideInput {
+export interface ProjectionMarketSide {
+  marketKey: string;
+  sideKey: string;
+  marketLabel: string;
+  sideLabel: string;
+  bookPrice: number | null | undefined;
+  modelPrice: number | null | undefined;
+  decision: MarketDecisionDisplay;
   /** Country flag emoji for participant-bound sides (soccer); null otherwise. */
   flag?: string | null;
 }
@@ -97,6 +107,8 @@ export interface ProjectionGame {
   /** Scheduled-MLB-only probable pitchers and batting orders from Rotowire. */
   pregameLineups?: ProjectionPregameLineups;
   markets: ProjectionMarket[];
+  /** Ranked and classified by the private engine; the browser only renders it. */
+  decisionSummary: DecisionSummaryDisplay;
   /**
    * FALSE when this game has no published model output at all — either the
    * model never ran (`modelRunAt` is null) or every market was withheld by the

@@ -1,7 +1,11 @@
-import type { MarketSideInput } from "@/lib/gameInsight";
+import type {
+  DecisionSummaryDisplay,
+  MarketDecisionDisplay,
+} from "@shared/types";
 import type {
   ProjectionGame,
   ProjectionMarket,
+  ProjectionMarketSide,
   ProjectionTeam,
   GameStatus,
 } from "./types";
@@ -12,8 +16,7 @@ import type {
  * Structurally typed (FeedSpecLike) so it does not couple to the page's internal
  * type, and so it can be unit-tested in isolation. It only RE-SHAPES existing
  * data — it does not change any projection, price, or edge. The American prices
- * are parsed back to numbers so the decision engine can rank markets; because the
- * engine uses the same calculateEdge as the feed, the derived edges match.
+ * are parsed only for display; the private engine supplies every decision.
  */
 
 interface CrestLike {
@@ -27,11 +30,14 @@ interface TeamLike {
   score?: string | null;
 }
 interface RowLike {
+  sideKey: string;
   label: string;
   book: string;
   model: string;
+  decision: MarketDecisionDisplay;
 }
 interface MarketLike {
+  decisionKey: string;
   title: string;
   rows: RowLike[];
   foot: { label: string; edge: boolean };
@@ -49,6 +55,7 @@ export interface FeedSpecLike {
   meta: string;
   venueLine?: string | null;
   markets: MarketLike[];
+  decisionSummary?: DecisionSummaryDisplay;
 }
 
 /** Parse a formatted American-odds string ("-198", "+163", "—") to a number. */
@@ -88,15 +95,15 @@ export function feedSpecToProjectionGame(
   });
 
   const markets: ProjectionMarket[] = g.markets.map(m => {
-    const key = m.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const sides: MarketSideInput[] = m.rows.map((row, i) => ({
+    const key = m.decisionKey;
+    const sides: ProjectionMarketSide[] = m.rows.map(row => ({
       marketKey: key,
+      sideKey: row.sideKey,
       marketLabel: m.title,
       sideLabel: row.label,
       bookPrice: parseAmerican(row.book),
-      // two-sided markets: the opposite row supplies the no-vig comparison
-      bookOppPrice: parseAmerican(m.rows[m.rows.length - 1 - i]?.book),
       modelPrice: parseAmerican(row.model),
+      decision: row.decision,
     }));
     return {
       key,
@@ -121,5 +128,6 @@ export function feedSpecToProjectionGame(
     venue: isPregame ? (g.venueLine ?? undefined) : undefined,
     startTime: isPregame ? g.timeLabel || undefined : undefined,
     markets,
+    decisionSummary: g.decisionSummary ?? { mode: "unavailable", items: [] },
   };
 }

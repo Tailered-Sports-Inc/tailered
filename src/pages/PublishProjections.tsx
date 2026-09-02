@@ -3,7 +3,7 @@
  *
  * Looks IDENTICAL to the Dashboard GameCard feed. The MODEL LINE and MODEL O/U
  * pill cells are editable inputs — @prez taps/clicks them and types the value.
- * Edge verdict at the bottom auto-calculates live as values are typed.
+ * Edge verdicts are returned by the private engine after save.
  *
  * Access: owner role only — non-owners are immediately redirected to /dashboard.
  * Backend: all procedures use ownerProcedure (server-side owner check enforced).
@@ -25,21 +25,9 @@ import {
   EyeOff,
   Trophy,
   RefreshCw,
-  Trash2,
   CheckCheck,
   Settings,
 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { getNbaTeamByDbSlug } from "@shared/nbaTeams";
 import { NHL_BY_DB_SLUG } from "@shared/nhlTeams";
 import { BettingSplitsPanel } from "@/components/BettingSplitsPanel";
@@ -99,32 +87,6 @@ function formatDate(dateStr: string): string {
   } catch {
     return dateStr;
   }
-}
-
-function getEdgeColor(diff: number): string {
-  if (diff <= 0) return "#FFFFFF";
-  if (diff < 1.5) return "#45E0A8";
-  if (diff < 2.0) return "#45E0A8";
-  if (diff < 2.5) return "#45E0A8";
-  if (diff < 3.0) return "#45E0A8";
-  if (diff < 3.5) return "#45E0A8";
-  if (diff < 4.0) return "#45E0A8";
-  if (diff < 4.5) return "#45E0A8";
-  return "#45E0A8";
-}
-function getEvGrade(diff: number | null): string {
-  const d = diff ?? 0;
-  if (d <= 0) return "F";
-  if (d < 0.5) return "D";
-  if (d < 1.0) return "C";
-  if (d < 1.5) return "C+";
-  if (d < 2.0) return "B-";
-  if (d < 2.5) return "B";
-  if (d < 3.0) return "B+";
-  if (d < 3.5) return "A-";
-  if (d < 4.0) return "A";
-  if (d < 4.5) return "A+";
-  return "A+";
 }
 
 function spreadSign(n: number): string {
@@ -426,8 +388,8 @@ function EdgeVerdictLive({
     );
   }
 
-  const spreadColor = getEdgeColor(spreadDiff);
-  const totalColor = getEdgeColor(totalDiff);
+  const spreadColor = "#45E0A8";
+  const totalColor = "#45E0A8";
   const isSpreadStrong = spreadDiff >= 3;
   const isTotalStrong = totalDiff >= 3;
 
@@ -567,11 +529,9 @@ type GameRow = {
 function EditableGameCard({
   game,
   onSaved,
-  showDeleteButton = false,
 }: {
   game: GameRow;
   onSaved: () => void;
-  showDeleteButton?: boolean;
 }) {
   // Active market toggle — mirrors the SPREAD/TOTAL/MONEYLINE toggle for OddsHistoryPanel
   const [activeMarket, setActiveMarket] = useState<"spread" | "total" | "ml">(
@@ -601,15 +561,6 @@ function EditableGameCard({
   const updateMutation = trpc.games.updateProjections.useMutation();
   const publishMutation = trpc.games.setPublished.useMutation();
   const approveModelMutation = trpc.games.setModelPublished.useMutation();
-  const deleteMutation = trpc.games.deleteGame.useMutation({
-    onSuccess: () => {
-      toast.success("Game permanently deleted from database");
-      utils.games.listStaging.invalidate();
-      onSaved();
-    },
-    onError: () => toast.error("Delete failed — please try again"),
-  });
-
   // Sync from server when game data refreshes (don't overwrite if user is typing)
   useEffect(() => {
     if (!dirty) {
@@ -737,65 +688,10 @@ function EditableGameCard({
     }
   };
 
-  // Compute edge labels live from current input values
-  function computeEdges() {
-    const awayN = parseFloat(awaySpread);
-    const homeN = parseFloat(homeSpread);
-    const totalN = parseFloat(modelTotal);
-    const awayBook = toNum(game.awayBookSpread);
-    const homeBook = toNum(game.homeBookSpread);
-    const bookTot = toNum(game.bookTotal);
-
-    let spreadEdge: string | null = null;
-    let spreadDiff: string | null = null;
-    let totalEdge: string | null = null;
-    let totalDiffVal: string | null = null;
-
-    if (
-      !isNaN(awayN) &&
-      !isNaN(homeN) &&
-      !isNaN(awayBook) &&
-      !isNaN(homeBook)
-    ) {
-      // Positive diff = model is more favorable for that team vs book
-      const awayDiff = awayBook - awayN;
-      const homeDiff = homeBook - homeN;
-      const useAway = Math.abs(awayDiff) >= Math.abs(homeDiff);
-      const bestDiff = useAway ? awayDiff : homeDiff;
-      const edgeTeam = useAway ? game.awayTeam : game.homeTeam;
-      const edgeSpread = useAway ? awayN : homeN;
-
-      if (Math.abs(bestDiff) > 0) {
-        spreadEdge = `${edgeTeam} (${edgeSpread > 0 ? "+" : ""}${edgeSpread})`;
-        spreadDiff = String(Math.round(Math.abs(bestDiff) * 10) / 10);
-      } else {
-        spreadEdge = "PASS";
-        spreadDiff = "0";
-      }
-    }
-
-    if (!isNaN(totalN) && !isNaN(bookTot)) {
-      const diff = Math.round((totalN - bookTot) * 10) / 10;
-      if (diff > 0) {
-        totalEdge = `OVER ${totalN}`;
-        totalDiffVal = String(Math.abs(diff));
-      } else if (diff < 0) {
-        totalEdge = `UNDER ${totalN}`;
-        totalDiffVal = String(Math.abs(diff));
-      } else {
-        totalEdge = "PASS";
-        totalDiffVal = "0";
-      }
-    }
-
-    return { spreadEdge, spreadDiff, totalEdge, totalDiff: totalDiffVal };
-  }
-
   const handleSave = async () => {
     setSaving(true);
     const isFirstSubmit = !hasBeenSubmitted;
     try {
-      const edges = computeEdges();
       await updateMutation.mutateAsync({
         id: game.id,
         awayModelSpread: awaySpread || null,
@@ -803,7 +699,6 @@ function EditableGameCard({
         modelTotal: modelTotal || null,
         modelAwayML: awayML || null,
         modelHomeML: homeML || null,
-        ...edges,
         // NHL-specific odds (only send if NHL game)
         ...(game.sport === "NHL"
           ? {
@@ -890,17 +785,16 @@ function EditableGameCard({
         ? "—"
         : `${bookTotal}`;
 
-  // Live edge preview
-  const edges = computeEdges();
-  const previewSpreadDiff = parseFloat(edges.spreadDiff ?? "0") || 0;
-  const previewTotalDiff = parseFloat(edges.totalDiff ?? "0") || 0;
+  // The private engine computes and persists these values after save.
+  const previewSpreadDiff = parseFloat(game.spreadDiff ?? "0") || 0;
+  const previewTotalDiff = parseFloat(game.totalDiff ?? "0") || 0;
   const maxDiff = Math.max(previewSpreadDiff, previewTotalDiff);
 
   // Border color: green if published, edge-colored if has model data, dim if empty
   const borderColor = game.publishedToFeed
     ? "#45E0A8"
     : maxDiff > 0
-      ? getEdgeColor(maxDiff)
+      ? "#45E0A8"
       : "#FFFFFF";
 
   const isNHL = game.sport === "NHL";
@@ -946,106 +840,8 @@ function EditableGameCard({
         overflow: "hidden",
       }}
     >
-      {/* Top-right button group: Delete (conditional) + Publish toggle */}
+      {/* Top-right publish control. Destructive deletion is intentionally absent. */}
       <div className="absolute top-1.5 right-2 z-10 flex items-center gap-1.5">
-        {/* DELETE button — only shown when showDeleteButton=true (owner-only, MISSING ODDS / NOT MODELED views) */}
-        {showDeleteButton && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <button
-                type="button"
-                disabled={deleteMutation.isPending}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-md text-sm font-semibold transition-all"
-                style={{
-                  background: "transparent",
-                  color: "#FFFFFF",
-                  border: "1px solid #FFFFFF",
-                }}
-                title="Permanently delete this game from the database"
-              >
-                {deleteMutation.isPending ? (
-                  <Loader2 size={9} className="animate-spin" />
-                ) : (
-                  <Trash2 size={9} />
-                )}
-                Delete
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent
-              style={{
-                background: "#000000",
-                border: "2px solid #FFFFFF",
-                boxShadow: "none",
-              }}
-            >
-              <AlertDialogHeader>
-                <AlertDialogTitle
-                  className="flex items-center gap-2 text-base font-black tracking-wide"
-                  style={{ color: "#FFFFFF" }}
-                >
-                  <Trash2 size={18} />
-                  PERMANENTLY DELETE GAME
-                </AlertDialogTitle>
-                <AlertDialogDescription
-                  className="text-sm leading-relaxed"
-                  style={{ color: "#FFFFFF" }}
-                >
-                  <span className="block font-bold text-white mb-1">
-                    {game.awayTeam
-                      .split("_")
-                      .map(
-                        (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
-                      )
-                      .join(" ")}
-                    {" @ "}
-                    {game.homeTeam
-                      .split("_")
-                      .map(
-                        (w: string) => w.charAt(0).toUpperCase() + w.slice(1)
-                      )
-                      .join(" ")}
-                  </span>
-                  This will{" "}
-                  <strong style={{ color: "#FFFFFF" }}>
-                    permanently remove this game
-                  </strong>{" "}
-                  from the database. It will no longer appear on the Publish
-                  Projections page or the public feed.
-                  <br />
-                  <br />
-                  <strong style={{ color: "#FFFFFF" }}>
-                    This action is irreversible.
-                  </strong>{" "}
-                  There is no undo. The game cannot be recovered once deleted.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel
-                  className="text-xs font-semibold"
-                  style={{
-                    background: "transparent",
-                    border: "1px solid #FFFFFF",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => deleteMutation.mutate({ id: game.id })}
-                  className="text-xs font-black tracking-wide"
-                  style={{
-                    background: "transparent",
-                    color: "#FFFFFF",
-                    border: "1px solid #FFFFFF",
-                  }}
-                >
-                  Yes, Delete Permanently
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
-
         {/* Publish toggle */}
         <button
           type="button"
@@ -1437,9 +1233,9 @@ function EditableGameCard({
               {hasAnyModel && (
                 <EdgeVerdictLive
                   spreadDiff={previewSpreadDiff}
-                  spreadEdge={edges.spreadEdge ?? "PASS"}
+                  spreadEdge={game.spreadEdge ?? "PASS"}
                   totalDiff={previewTotalDiff}
-                  totalEdge={edges.totalEdge ?? "PASS"}
+                  totalEdge={game.totalEdge ?? "PASS"}
                 />
               )}
             </div>
@@ -2135,9 +1931,9 @@ function EditableGameCard({
             {hasAnyModel && (
               <EdgeVerdictLive
                 spreadDiff={previewSpreadDiff}
-                spreadEdge={edges.spreadEdge ?? "PASS"}
+                spreadEdge={game.spreadEdge ?? "PASS"}
                 totalDiff={previewTotalDiff}
-                totalEdge={edges.totalEdge ?? "PASS"}
+                totalEdge={game.totalEdge ?? "PASS"}
               />
             )}
           </div>
@@ -3348,11 +3144,6 @@ export default function PublishProjections() {
                 key={game.id}
                 game={game as GameRow}
                 onSaved={handleRefetch}
-                showDeleteButton={
-                  isOwner &&
-                  (statusFilter === "missing_odds" ||
-                    statusFilter === "not_modeled")
-                }
               />
             ))
           )}
