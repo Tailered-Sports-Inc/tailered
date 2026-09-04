@@ -160,8 +160,8 @@ export default function ManageAccount() {
   const planId = (appUser as { stripePlanId?: string | null }).stripePlanId;
   const expiry = appUser.expiryDate;
   const isLifetime = !expiry || planId === "lifetime";
-  const hasStripe = !!(appUser as { stripeCustomerId?: string | null })
-    .stripeCustomerId;
+  const hasBillingPortal =
+    (appUser as { billingPortalAvailable?: boolean }).billingPortalAvailable === true;
   // cancelAtPeriodEnd: true = set to cancel at period end, still has access
   // !hasAccess: fully expired
   const cancelAtPeriodEnd =
@@ -328,7 +328,7 @@ export default function ManageAccount() {
             </button>
 
             {/* Update Payment Info — only for Stripe subscribers */}
-            {hasStripe && !isLifetime && (
+            {hasBillingPortal && !isLifetime && (
               <button
                 type="button"
                 disabled={portalMutation.isPending}
@@ -352,7 +352,7 @@ export default function ManageAccount() {
             )}
 
             {/* Subscription action button — 3 states: cancel / reactivate / renew */}
-            {hasStripe && !isLifetime && (
+            {hasBillingPortal && !isLifetime && (
               <>
                 {subButtonState === "cancel" && (
                   <button
